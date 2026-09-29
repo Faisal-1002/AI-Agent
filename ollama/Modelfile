@@ -1,0 +1,5 @@
+# Qwen3 8B with a 16k context window.
+# OpenCode's system prompt + tool definitions are large; Ollama's default
+# context is too small for reliable tool calls. 16k keeps everything on a 10 GB GPU.
+FROM qwen3:8b
+PARAMETER num_ctx 16384
