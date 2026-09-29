@@ -1,0 +1,92 @@
+import { useCallback, useEffect, useReducer, useRef } from "react";
+import type { ChatEvent, Conversation } from "../../../shared/chat";
+import { api } from "../lib/api";
+import { chatReducer, initialChat } from "../lib/chatReducer";
+
+type Handlers = {
+  onCreated: (conversation: Conversation) => void;
+  onTitle: (id: string, title: string) => void;
+};
+
+type Stream = { id: string; source: EventSource; openedBySend: boolean };
+
+// Owns one conversation's messages: loads history, listens to live events, sends and stops.
+export function useChat(conversationId: string | undefined, handlers: Handlers) {
+  const [state, dispatch] = useReducer(chatReducer, initialChat);
+  const stream = useRef<Stream | null>(null);
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+
+  // Open the live event stream; resolves once the backend is subscribed to OpenCode,
+  // so a prompt sent afterwards can't "miss" the start of its reply.
+  const connect = useCallback((id: string, openedBySend: boolean) => {
+    stream.current?.source.close();
+    const source = new EventSource(api.eventsUrl(id));
+    stream.current = { id, source, openedBySend };
+
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Timed out connecting to seyl-ai")), 10_000);
+      source.onmessage = (e) => {
+        const event = JSON.parse(e.data) as ChatEvent;
+        if (event.type === "ready") {
+          clearTimeout(timeout);
+          resolve();
+        }
+        if (event.type === "title") handlersRef.current.onTitle(id, event.title);
+        dispatch(event);
+      };
+    });
+  }, []);
+
+  // Switching conversations: load its history and listen for live updates.
+  useEffect(() => {
+    if (!conversationId) {
+      stream.current?.source.close();
+      stream.current = null;
+      dispatch({ type: "reset", messages: [], busy: false });
+      return;
+    }
+    // send() just created this conversation and is already streaming it.
+    if (stream.current?.id === conversationId && stream.current.openedBySend) return;
+
+    let cancelled = false;
+    dispatch({ type: "reset", messages: [], busy: false });
+    api
+      .messages(conversationId)
+      .then(({ messages, busy }) => !cancelled && dispatch({ type: "reset", messages, busy }))
+      .catch((err: Error) => !cancelled && dispatch({ type: "failed", message: err.message }));
+    connect(conversationId, false).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, connect]);
+
+  // Close the stream when the chat view goes away.
+  useEffect(() => () => stream.current?.source.close(), []);
+
+  const send = useCallback(
+    async (text: string) => {
+      dispatch({ type: "sending" });
+      try {
+        let id = conversationId;
+        if (!id) {
+          // Like LibreChat: a conversation is only created when its first message is sent.
+          const conversation = await api.createConversation();
+          id = conversation.id;
+          await connect(id, true);
+          handlersRef.current.onCreated(conversation);
+        }
+        await api.prompt(id, text);
+      } catch (err) {
+        dispatch({ type: "failed", message: (err as Error).message });
+      }
+    },
+    [conversationId, connect],
+  );
+
+  const stop = useCallback(() => {
+    if (conversationId) api.abort(conversationId).catch(() => {});
+  }, [conversationId]);
+
+  return { ...state, send, stop };
+}

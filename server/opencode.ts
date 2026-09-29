@@ -1,5 +1,6 @@
 import path from "node:path";
 import { createOpencodeClient, type Config } from "@opencode-ai/sdk/v2";
+import type { ModelInfo } from "../shared/chat.js";
 
 // Where the OpenCode harness listens (started by server/harness.ts).
 export const OPENCODE_PORT = 4097;
@@ -9,6 +10,7 @@ export const WORKSPACE = path.resolve("workspace");
 
 // Which model OpenCode should use: provider "ollama", model created from ollama/Modelfile.
 export const MODEL = { providerID: "ollama", modelID: "seyl-qwen3-8b" };
+export const MODEL_INFO: ModelInfo = { provider: "Ollama", name: "Qwen3 8B" };
 
 // OpenCode configuration, passed straight to the `opencode serve` process.
 // Same shape as an opencode.json file.

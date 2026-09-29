@@ -1,148 +1,86 @@
-import { useEffect, useReducer, useRef, useState, type FormEvent } from "react";
-import type { ChatEvent } from "../../server/events";
-
-type Part =
-  | { id: string; kind: "text" | "reasoning"; text: string }
-  | { id: string; kind: "tool"; tool: string; status: string };
-
-type Message = { id: string; role: "user" | "assistant"; parts: Part[] };
-
-type State = { messages: Message[]; busy: boolean; error?: string };
-
-// Apply one event from the backend to the chat state.
-function reducer(state: State, event: ChatEvent | { type: "sent" }): State {
-  if (event.type === "sent") return { ...state, busy: true, error: undefined };
-  if (event.type === "idle") return { ...state, busy: false };
-  if (event.type === "error") return { ...state, busy: false, error: event.message };
-
-  const messages = [...state.messages];
-  let index = messages.findIndex((m) => m.id === event.messageID);
-  if (index === -1) {
-    messages.push({ id: event.messageID, role: "assistant", parts: [] });
-    index = messages.length - 1;
-  }
-  const message = { ...messages[index] };
-  messages[index] = message;
-
-  if (event.type === "message") {
-    message.role = event.role;
-    return { ...state, messages };
-  }
-
-  if (event.type === "delta") {
-    // Append streamed tokens to the part they belong to.
-    const existing = message.parts.find((p) => p.id === event.partID);
-    const text = (existing && existing.kind !== "tool" ? existing.text : "") + event.delta;
-    const part: Part = { id: event.partID, kind: existing?.kind === "reasoning" ? "reasoning" : "text", text };
-    message.parts = existing
-      ? message.parts.map((p) => (p.id === part.id ? part : p))
-      : [...message.parts, part];
-    return { ...state, messages };
-  }
-
-  const part: Part =
-    event.type === "tool"
-      ? { id: event.partID, kind: "tool", tool: event.tool, status: event.status }
-      : { id: event.partID, kind: event.type, text: event.text };
-  const partIndex = message.parts.findIndex((p) => p.id === part.id);
-  message.parts = partIndex === -1
-    ? [...message.parts, part]
-    : message.parts.map((p, i) => (i === partIndex ? part : p));
-  return { ...state, messages };
-}
+import { useCallback, useEffect, useState } from "react";
+import { ChatHeader } from "./components/chat/ChatHeader";
+import { Landing } from "./components/chat/Landing";
+import { MessageList } from "./components/chat/MessageList";
+import { ChatForm } from "./components/input/ChatForm";
+import { Sidebar } from "./components/nav/Sidebar";
+import { useChat } from "./hooks/useChat";
+import { useConversations } from "./hooks/useConversations";
+import { useMediaQuery } from "./hooks/useMediaQuery";
+import { useModel } from "./hooks/useModel";
 
 export function App() {
-  const [sessionID, setSessionID] = useState<string>();
-  const [state, dispatch] = useReducer(reducer, { messages: [], busy: false });
-  const [input, setInput] = useState("");
-  const bottom = useRef<HTMLDivElement>(null);
+  const wide = useMediaQuery("(min-width: 768px)");
+  const [sidebarOpen, setSidebarOpen] = useState(wide);
+  const [activeId, setActiveId] = useState<string>();
+  const model = useModel();
+  const { conversations, add, rename, remove } = useConversations();
 
-  // Create a session once, then listen to its live event stream.
-  useEffect(() => {
-    let cancelled = false; // React dev mode runs effects twice; ignore the first run's result
-    let source: EventSource | undefined;
-    fetch("/api/session", { method: "POST" })
-      .then(async (res) => {
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error ?? res.statusText);
-        return body as { id: string };
-      })
-      .then(({ id }) => {
-        if (cancelled) return;
-        setSessionID(id);
-        source = new EventSource(`/api/session/${id}/events`);
-        source.onmessage = (e) => dispatch(JSON.parse(e.data) as ChatEvent);
-      })
-      .catch((err: Error) => {
-        if (!cancelled) dispatch({ type: "error", message: `${err.message} (refresh to retry)` });
-      });
-    return () => {
-      cancelled = true;
-      source?.close();
-    };
-  }, []);
+  const chat = useChat(activeId, {
+    onCreated: (conversation) => {
+      add(conversation);
+      setActiveId(conversation.id);
+    },
+    onTitle: rename,
+  });
 
-  useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: "smooth" });
-  }, [state.messages]);
+  useEffect(() => setSidebarOpen(wide), [wide]);
 
-  async function send(e: FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
-    if (!text || !sessionID || state.busy) return;
-    setInput("");
-    dispatch({ type: "sent" });
-    await fetch(`/api/session/${sessionID}/prompt`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-  }
+  const select = useCallback(
+    (id: string | undefined) => {
+      setActiveId(id);
+      if (!wide) setSidebarOpen(false);
+    },
+    [wide],
+  );
+
+  const deleteConversation = useCallback(
+    async (id: string) => {
+      if (!window.confirm("Delete this conversation? This can't be undone.")) return;
+      await remove(id);
+      if (id === activeId) setActiveId(undefined);
+    },
+    [remove, activeId],
+  );
+
+  const empty = chat.messages.length === 0 && !chat.busy;
 
   return (
-    <main>
-      <header>
-        <h1>seyl-ai</h1>
-        <span className="model">OpenCode · Qwen3 8B (local)</span>
-      </header>
+    <div className="flex h-dvh overflow-hidden bg-presentation text-text-primary">
+      <Sidebar
+        open={sidebarOpen}
+        overlay={!wide}
+        conversations={conversations}
+        activeId={activeId}
+        onClose={() => setSidebarOpen(false)}
+        onNewChat={() => select(undefined)}
+        onSelect={select}
+        onDelete={deleteConversation}
+      />
 
-      <section className="messages">
-        {state.messages.length === 0 && (
-          <p className="empty">Ask something — e.g. “What files are in the workspace?”</p>
-        )}
-        {state.messages.map((m) => (
-          <div key={m.id} className={`message ${m.role}`}>
-            {m.parts.map((p) =>
-              p.kind === "reasoning" ? (
-                <details key={p.id} className="reasoning">
-                  <summary>Thinking</summary>
-                  <p>{p.text}</p>
-                </details>
-              ) : p.kind === "tool" ? (
-                <div key={p.id} className={`tool ${p.status}`}>
-                  🔧 {p.tool} <span>{p.status}</span>
-                </div>
-              ) : (
-                <p key={p.id}>{p.text}</p>
-              ),
-            )}
-          </div>
-        ))}
-        {state.busy && <div className="status">seyl-ai is working…</div>}
-        {state.error && <div className="error">Error: {state.error}</div>}
-        <div ref={bottom} />
-      </section>
-
-      <form onSubmit={send}>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={sessionID ? "Message seyl-ai…" : "Connecting…"}
-          disabled={!sessionID}
-          autoFocus
+      <main className="flex min-w-0 flex-1 flex-col">
+        <ChatHeader
+          sidebarOpen={sidebarOpen}
+          onOpenSidebar={() => setSidebarOpen(true)}
+          onNewChat={() => select(undefined)}
+          model={model}
         />
-        <button disabled={!sessionID || state.busy || !input.trim()}>Send</button>
-      </form>
-    </main>
+
+        {empty ? <Landing /> : <MessageList key={activeId} messages={chat.messages} busy={chat.busy} />}
+
+        {chat.error && (
+          <div className="mx-auto mb-2 w-full max-w-3xl px-4 md:px-5">
+            <div className="rounded-xl border border-text-destructive/40 bg-text-destructive/10 px-4 py-2 text-sm text-text-destructive">
+              {chat.error}
+            </div>
+          </div>
+        )}
+
+        <ChatForm busy={chat.busy} onSend={chat.send} onStop={chat.stop} />
+        <p className="px-4 py-2 text-center text-xs text-text-tertiary">
+          seyl-ai runs locally on your PC and can make mistakes.
+        </p>
+      </main>
+    </div>
   );
 }
