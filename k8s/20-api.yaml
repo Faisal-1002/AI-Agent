@@ -22,8 +22,17 @@ spec:
               value: http://harness:4097
           ports:
             - containerPort: 3000
+          # Zero-downtime rollouts: when a pod is told to stop, the load balancer
+          # needs a few seconds to stop sending it traffic. Wait before SIGTERM,
+          # otherwise requests in that window get a 502.
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
+          # Readiness = "can THIS pod serve?" — deliberately NOT "is the harness up?".
+          # If it checked the harness, a harness restart would mark every api pod
+          # unready and take down even requests that don't need the harness.
           readinessProbe:
-            httpGet: { path: /api/readyz, port: 3000 }
+            httpGet: { path: /api/healthz, port: 3000 }
             periodSeconds: 5
           livenessProbe:
             httpGet: { path: /api/healthz, port: 3000 }

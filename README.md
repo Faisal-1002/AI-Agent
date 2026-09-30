@@ -1,6 +1,6 @@
 # seyl-ai
 
-My own AI agent — a local web app built on the [OpenCode](https://github.com/anomalyco/opencode) harness, running an open model (Qwen3) on my own GPU.
+My own AI agent — a local web app built on the [OpenCode](https://github.com/anomalyco/opencode) harness, running open models (Qwen3.5) on my own GPU.
 
 ## How it works
 
@@ -14,13 +14,13 @@ seyl-ai backend (Hono)        localhost:3000   server/       my code: sessions, 
 OpenCode harness              localhost:4097   server/harness.ts   agent loop, tools, permissions
    │  OpenAI-compatible API
    ▼
-Ollama runtime                localhost:11434                inference on the GPU
+Ollama runtime                localhost:11434                inference
    │
-   ▼
-Qwen3 8B (16k context)                         ollama/Modelfile
+   ├─▶ Qwen3.5 9B   (GPU, 32k context)          main model: agent loop, tools, images
+   └─▶ Qwen3.5 0.8B (CPU, no thinking)          small model: chat titles
 ```
 
-- **Model** — Qwen3 8B, the "brain". Just weights; can't run on its own.
+- **Models** — Qwen3.5 9B is the "brain"; Qwen3.5 0.8B handles quick jobs (OpenCode's `small_model`). Just weights; they can't run on their own.
 - **Ollama** — the runtime that loads the weights onto the GPU and serves them over HTTP.
 - **OpenCode** — the harness: runs the agent loop (model → tool call → result → model …), provides tools (read, grep, glob, …), and enforces permissions.
 - **Backend** — conversations (= OpenCode sessions), prompts, stop, history, and a live event stream; translates OpenCode's data into a small model the UI understands (`server/translate.ts`, types in `shared/chat.ts`).
@@ -31,16 +31,30 @@ The agent can only see files in [`workspace/`](workspace). For now it's **read-o
 ## Requirements
 
 - Node.js 24+
-- [Ollama](https://ollama.com) with `qwen3:8b` pulled
+- [Ollama](https://ollama.com)
 - OpenCode: `npm install -g opencode-ai`
+- A GPU with ~8 GB free VRAM (developed on an RTX 3080 10 GB)
 
 ## Setup
 
 ```bash
 npm install
-ollama pull qwen3:8b
-ollama create seyl-qwen3-8b -f ollama/Modelfile
+ollama pull qwen3.5:9b
+ollama pull qwen3.5:0.8b
+ollama create seyl-qwen3.5-9b -f ollama/qwen3.5-9b.Modelfile
+ollama create seyl-qwen3.5-0.8b -f ollama/qwen3.5-0.8b.Modelfile
 ```
+
+### Models
+
+| Model | Where | Speed (RTX 3080) | Why |
+|---|---|---|---|
+| `seyl-qwen3.5-9b` | GPU, 6.5 GB incl. 32k context | ~79 tokens/s | Agent loop, tools, thinking, images. Hybrid attention keeps long context cheap. |
+| `seyl-qwen3.5-0.8b` | CPU (`num_gpu 0`) | title in ~3 s | Titles. Thinking disabled with `reasoningEffort: "none"`. |
+
+Lesson learned: with both models on a 10 GB GPU (plus the Windows desktop), VRAM overflowed and Windows
+spilled it into system RAM — generation dropped from ~46 to ~1 token/s. Keep the GPU for one model and put
+small helpers on the CPU. Check with `ollama ps` (PROCESSOR column) and `nvidia-smi`.
 
 ## Run
 
@@ -101,8 +115,13 @@ After changing code: `docker compose build` then `kubectl -n seyl-ai rollout res
 |---|---|
 | `k8s/00-namespace.yaml` | the `seyl-ai` namespace |
 | `k8s/10-harness.yaml` | harness Deployment (1 replica, `Recreate`), 1 GiB PersistentVolumeClaim for sessions, ClusterIP Service |
-| `k8s/20-api.yaml` | api Deployment (2 replicas) with readiness (`/api/readyz`) and liveness (`/api/healthz`) probes, ClusterIP Service |
-| `k8s/30-web.yaml` | web Deployment (2 replicas), LoadBalancer Service on port 8080 |
+| `k8s/20-api.yaml` | api Deployment (2 replicas) with readiness + liveness probes on `/api/healthz`, `preStop` pause, ClusterIP Service |
+| `k8s/30-web.yaml` | web Deployment (2 replicas), `preStop` pause, LoadBalancer Service on port 8080 |
+
+Lessons learned while testing rollouts (hammering the API during `rollout restart`):
+
+- **`preStop` pause**: a pod gets SIGTERM before the load balancer stops routing to it. Waiting 5 s first avoids 502s → 110/110 requests OK during an api rollout.
+- **Readiness ≠ "my dependencies are up"**: the api's readiness probe first checked the harness too. Restarting the harness then marked *every* api pod unready — a cascading outage. Now readiness only checks the pod itself; harness restarts cost ~2 failed chat-related requests instead of everything.
 
 ### Configuration
 
@@ -132,7 +151,7 @@ All settings are environment variables with local-dev defaults (`server/opencode
 | `web/src/components/chat/` | `MessageList`, `MessageTurn`, `parts/Reasoning`, `parts/ToolCall`, `Landing`, `ChatHeader` |
 | `web/src/components/nav/` | `Sidebar`, `ConversationItem` |
 | `web/src/components/input/` | `ChatForm`, `ComposerButton` |
-| `ollama/Modelfile` | Qwen3 8B with a 16k context window |
+| `ollama/*.Modelfile` | Model variants: Qwen3.5 9B (32k context), Qwen3.5 0.8B (CPU); the old Qwen3 8B for reference |
 | `workspace/` | The only folder the agent can see |
 
 ### Backend API

@@ -22,9 +22,11 @@ function unwrap<T>(result: { data?: T; error?: unknown }): T {
   return result.data;
 }
 
-// Health checks, used by Docker and Kubernetes:
-// - healthz: "is this process alive?" (if not, restart it)
-// - readyz:  "can it serve traffic?" (only if the OpenCode harness answers)
+// Health checks:
+// - healthz: "is this process alive and able to answer?" — Kubernetes liveness + readiness.
+// - readyz:  "is the OpenCode harness reachable too?" — for startup ordering (Compose)
+//   and diagnostics. Not used as a Kubernetes readiness probe: a harness restart
+//   would then mark every api pod unready at once (a cascading outage).
 app.get("/api/healthz", (c) => c.json({ ok: true }));
 app.get("/api/readyz", async (c) => {
   const { error } = await client.session.status({}).catch((err: Error) => ({ error: err.message }));

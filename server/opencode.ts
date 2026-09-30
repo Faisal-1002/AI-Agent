@@ -21,26 +21,43 @@ const OLLAMA_URL = env.OLLAMA_URL ?? "http://localhost:11434";
 // This path is sent to the harness, so it must exist where the *harness* runs.
 export const WORKSPACE = env.SEYL_WORKSPACE ?? path.resolve("workspace");
 
-// Which model OpenCode should use: provider "ollama", model created from ollama/Modelfile.
-export const MODEL = { providerID: "ollama", modelID: "seyl-qwen3-8b" };
-export const MODEL_INFO: ModelInfo = { provider: "Ollama", name: "Qwen3 8B" };
+// The models seyl-ai uses, created from the Modelfiles in ollama/ (see README).
+const MAIN_MODEL = "seyl-qwen3.5-9b"; // chat, agent loop, tools, images
+const SMALL_MODEL = "seyl-qwen3.5-0.8b"; // quick jobs such as chat titles
+
+export const MODEL = { providerID: "ollama", modelID: MAIN_MODEL };
+export const MODEL_INFO: ModelInfo = { provider: "Ollama", name: "Qwen3.5 9B" };
 
 // OpenCode configuration, passed straight to the `opencode serve` process.
 // Same shape as an opencode.json file.
 export const config: Config = {
   share: "disabled",
   autoupdate: false,
+  model: `ollama/${MAIN_MODEL}`,
+  // Titles etc. go to a tiny model, so they don't queue behind the main one.
+  small_model: `ollama/${SMALL_MODEL}`,
   provider: {
     ollama: {
       npm: "@ai-sdk/openai-compatible",
       name: "Ollama (local)",
       options: { baseURL: `${OLLAMA_URL}/v1` },
       models: {
-        "seyl-qwen3-8b": {
-          name: "Qwen3 8B (16k context)",
+        [MAIN_MODEL]: {
+          name: "Qwen3.5 9B",
           reasoning: true,
           tool_call: true,
-          limit: { context: 16384, output: 4096 },
+          attachment: true, // can receive images
+          modalities: { input: ["text", "image"], output: ["text"] },
+          limit: { context: 32768, output: 8192 },
+        },
+        [SMALL_MODEL]: {
+          name: "Qwen3.5 0.8B",
+          reasoning: false,
+          tool_call: false,
+          limit: { context: 8192, output: 512 },
+          // Qwen3.5 thinks by default; for a title that just burns the token budget.
+          // Sent to Ollama as reasoning_effort: "none".
+          options: { reasoningEffort: "none" },
         },
       },
     },
