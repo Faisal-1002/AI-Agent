@@ -3,14 +3,15 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createMiddleware } from "hono/factory";
 import { streamSSE } from "hono/streaming";
-import type { ChatEvent, GuardFlags, ImageAttachment, ModelInfo, PermissionReply, User } from "../shared/chat.js";
+import type { ChatEvent, GuardFlags, ModelInfo, PermissionReply, PromptRequest, User } from "../shared/chat.js";
 import { AUTH_ENABLED, authRoutes, requireUser } from "./auth.js";
 import { migrate } from "./db.js";
 import { addDocument, deleteDocument, fileType, listDocuments, MAX_UPLOAD_BYTES, SUPPORTED } from "./documents.js";
 import { reviewReply, screenPrompt } from "./guard.js";
 import { mcp } from "./mcp.js";
 import { claimUnowned, ownedBy, ownerOf, recordOwner } from "./owners.js";
-import { AGENT, client, MODEL, MODEL_INFO } from "./opencode.js";
+import { AGENT, client, FAST_VARIANT, MODEL, MODEL_INFO } from "./opencode.js";
+import { markUsed, warmUp } from "./warmup.js";
 import { guardFlags, sessionOf, toChatEvent, toChatMessage, toConversation, toPermissionAsk } from "./translate.js";
 import { voice } from "./voice.js";
 
@@ -55,7 +56,11 @@ app.get("/api/readyz", async (c) => {
   return error === undefined ? c.json({ ok: true }) : c.json({ ok: false, error }, 503);
 });
 
-app.get("/api/model", (c) => c.json<ModelInfo>(MODEL_INFO));
+// The UI asks for this when it opens — a good moment to load the models (server/warmup.ts).
+app.get("/api/model", (c) => {
+  warmUp();
+  return c.json<ModelInfo>(MODEL_INFO);
+});
 
 // Speech-to-text and text-to-speech (server/voice.ts).
 app.route("/api/voice", voice);
@@ -130,7 +135,7 @@ const MAX_IMAGE_CHARS = 6 * 1024 * 1024; // data URL length (~4.5 MB of image)
 // the agent starts and this returns immediately — the reply arrives on the event stream.
 app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 }), async (c) => {
   const sessionID = c.req.param("id");
-  const { text = "", images = [] } = await c.req.json<{ text?: string; images?: ImageAttachment[] }>();
+  const { text = "", images = [], think = false } = await c.req.json<PromptRequest>();
   if (!text.trim() && images.length === 0) return c.json({ error: "Empty message" }, 400);
   if (images.length > MAX_IMAGES) return c.json({ error: `At most ${MAX_IMAGES} images per message` }, 400);
   for (const image of images) {
@@ -139,6 +144,7 @@ app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 
     if (image.dataUrl.length > MAX_IMAGE_CHARS) return c.json({ error: `Image too large: ${image.name}` }, 413);
   }
 
+  markUsed();
   // Qwen3Guard reads text only: images themselves are NOT moderated (see README, Images).
   const screen = text.trim() ? await screenPrompt(text) : { allowed: true as const };
   if (!screen.allowed) {
@@ -156,13 +162,14 @@ app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 
     sessionID,
     agent: AGENT, // seyl-ai's own agent: system prompt + allowed tools (server/opencode.ts)
     model: MODEL,
+    variant: think ? undefined : FAST_VARIANT,
     parts: [
       ...(text.trim() ? [{ type: "text" as const, text }] : []),
       // Images travel as file parts with a data: URL; OpenCode → gateway → Ollama → the vision model.
       ...images.map((image) => ({ type: "file" as const, mime: image.mime, filename: image.name, url: image.dataUrl })),
     ],
   }));
-  void reviewWhenDone(sessionID, text || "(image)"); // check the reply once the agent finishes
+  void reviewWhenDone(sessionID, text || "(image)", think); // check the reply once the agent finishes
   return c.body(null, 204);
 });
 
@@ -175,7 +182,7 @@ const NUDGE = "(Write your final answer to my last question now, based on what y
 // filter on it and store any flag in the session's metadata (shown in the UI, survives reloads).
 // Note: this runs in the api pod that received the prompt; if that pod stops first,
 // it's skipped. A production system would hand this to a queue/worker.
-async function reviewWhenDone(sessionID: string, prompt: string) {
+async function reviewWhenDone(sessionID: string, prompt: string, think: boolean) {
   try {
     let nudged = false;
     const deadline = Date.now() + 15 * 60_000;
@@ -199,12 +206,17 @@ async function reviewWhenDone(sessionID: string, prompt: string) {
         .flatMap((p) => (p.type === "text" && !p.synthetic ? [p.text] : []))
         .join("\n\n");
 
-      // Safety net: no visible answer (and the user didn't press Stop) → ask once for it.
+      // Safety net: the final step wrote nothing visible (and the user didn't press Stop) →
+      // ask once for it. A short answer ("4") is fine; only an EMPTY last step is the bug.
       const aborted = last.role === "assistant" && last.error?.name === "MessageAbortedError";
-      if (text.trim().length < 20 && !nudged && !aborted) {
+      const lastText = reply.at(-1)!.parts.some((p) => p.type === "text" && !p.synthetic && p.text.trim());
+      if (!lastText && !nudged && !aborted) {
         nudged = true;
         console.log(`[agent] ${sessionID}: turn ended without a visible answer — nudging once`);
-        check(await client.session.promptAsync({ sessionID, agent: AGENT, model: MODEL, parts: [{ type: "text", text: NUDGE, synthetic: true }] }));
+        check(await client.session.promptAsync({
+          sessionID, agent: AGENT, model: MODEL, variant: think ? undefined : FAST_VARIANT,
+          parts: [{ type: "text", text: NUDGE, synthetic: true }],
+        }));
         continue;
       }
 

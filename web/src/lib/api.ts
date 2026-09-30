@@ -1,4 +1,4 @@
-import type { ChatMessage, Conversation, DocumentInfo, GuardFlags, ImageAttachment, ModelInfo, PermissionAsk, PermissionReply, User, VoiceStatus } from "../../../shared/chat";
+import type { ChatMessage, Conversation, DocumentInfo, GuardFlags, ModelInfo, PermissionAsk, PermissionReply, PromptRequest, User, VoiceStatus } from "../../../shared/chat";
 
 // Typed wrappers around the seyl-ai backend (server/index.ts).
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -22,11 +22,11 @@ export const api = {
   deleteConversation: (id: string) => request<void>(`/conversations/${id}`, { method: "DELETE" }),
   messages: (id: string) =>
     request<{ messages: ChatMessage[]; busy: boolean; flags: GuardFlags; permissions: PermissionAsk[] }>(`/conversations/${id}/messages`),
-  prompt: (id: string, text: string, images: ImageAttachment[] = []) =>
+  prompt: (id: string, body: PromptRequest) =>
     request<void>(`/conversations/${id}/prompt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, images }),
+      body: JSON.stringify(body),
     }),
   answerPermission: (id: string, requestID: string, reply: PermissionReply) =>
     request<void>(`/conversations/${id}/permissions/${requestID}`, {
@@ -46,6 +46,8 @@ export const api = {
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
 
   voiceStatus: () => request<VoiceStatus>("/voice/status"),
+  // Fire and forget: start loading the speech-to-text model (the 🎤 was just pressed).
+  warmVoice: () => void fetch("/api/voice/warm", { method: "POST" }).catch(() => {}),
   transcribe: (audio: Blob) => {
     const form = new FormData();
     form.append("file", audio, audio.type.includes("ogg") ? "recording.ogg" : "recording.webm");

@@ -6,7 +6,6 @@ GET  /health
 
 import os
 import subprocess
-import threading
 
 import numpy as np
 import torch
@@ -14,21 +13,26 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from qwen_asr import Qwen3ASRModel
 
+from lazy_model import LazyModel
+
 MODEL_ID = os.environ.get("ASR_MODEL", "Qwen/Qwen3-ASR-0.6B")
 SAMPLE_RATE = 16_000
 
 torch.set_num_threads(int(os.environ.get("TORCH_THREADS", "8")))
 
-# Loaded once at startup (downloaded from Hugging Face on first run, then cached in HF_HOME).
+# Loaded on first use, unloaded after UNLOAD_AFTER_SECONDS idle (0 = keep it) — see lazy_model.py.
+# Downloaded from Hugging Face the first time, then cached in HF_HOME.
 # CPU + float32: this container leaves the GPU to the chat model.
-model = Qwen3ASRModel.from_pretrained(
-    MODEL_ID,
-    dtype=torch.float32,
-    device_map="cpu",
-    max_inference_batch_size=1,
-    max_new_tokens=512,
+model = LazyModel(
+    lambda: Qwen3ASRModel.from_pretrained(
+        MODEL_ID,
+        dtype=torch.float32,
+        device_map="cpu",
+        max_inference_batch_size=1,
+        max_new_tokens=512,
+    ),
+    idle_seconds=float(os.environ.get("UNLOAD_AFTER_SECONDS", "900")),
 )
-lock = threading.Lock()  # one transcription at a time; the model isn't built for concurrent calls
 
 app = FastAPI(title="seyl-ai ASR")
 
@@ -48,13 +52,12 @@ def decode(audio: bytes) -> np.ndarray:
 
 
 def transcribe(samples: np.ndarray):
-    with lock:
-        return model.transcribe(audio=(samples, SAMPLE_RATE), language=None)[0]
+    return model.run(lambda m: m.transcribe(audio=(samples, SAMPLE_RATE), language=None)[0])
 
 
 @app.get("/health")
 def health():
-    return {"ok": True, "model": MODEL_ID}
+    return {"ok": True, "model": MODEL_ID, "loaded": model.loaded}
 
 
 @app.post("/v1/audio/transcriptions")

@@ -46,6 +46,40 @@ voice.post("/transcribe", async (c) => {
   return c.json({ text, language });
 });
 
+// 🎤 was just pressed: load the speech-to-text model while the user is still talking.
+// (The voice services unload their models after 15 idle minutes — voice/lazy_model.py.)
+// The warm-up is a real, tiny request: half a second of silence.
+voice.post("/warm", (c) => {
+  const form = new FormData();
+  form.append("model", ASR_MODEL);
+  form.append("file", new Blob([silentWav(0.5)], { type: "audio/wav" }), "warmup.wav");
+  gateway("/v1/audio/transcriptions", { method: "POST", body: form })
+    .then((res) => res.body?.cancel())
+    .catch(() => {});
+  return c.body(null, 202);
+});
+
+// A WAV file of silence: 16 kHz, mono, 16-bit — a 44-byte header, then zeros.
+function silentWav(seconds: number): ArrayBuffer {
+  const rate = 16_000;
+  const dataBytes = Math.round(rate * seconds) * 2;
+  const view = new DataView(new ArrayBuffer(44 + dataBytes));
+  const text = (offset: number, s: string) => [...s].forEach((ch, i) => view.setUint8(offset + i, ch.charCodeAt(0)));
+  text(0, "RIFF");
+  view.setUint32(4, 36 + dataBytes, true);
+  text(8, "WAVEfmt ");
+  view.setUint32(16, 16, true); // fmt chunk size
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate * 2, true); // bytes per second
+  view.setUint16(32, 2, true); // bytes per sample
+  view.setUint16(34, 16, true); // bits per sample
+  text(36, "data");
+  view.setUint32(40, dataBytes, true);
+  return view.buffer;
+}
+
 // 🔊 Text → spoken audio (WAV), streamed straight back to the browser.
 // The UI sends a long reply in sentence chunks (shared/speech.ts), one request each.
 voice.post("/speak", async (c) => {

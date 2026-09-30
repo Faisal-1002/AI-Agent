@@ -187,8 +187,8 @@ agent ──► MCP tool docs_search_documents ──► api /mcp ──► near
 - Documents live in the database, not on disk: the api stays stateless (any replica can serve any request).
 
 Measured: the README (20 KB) → 23 passages; indexing takes ~2 s warm, ~17 s when the embedding model has to be
-loaded first (Ollama unloads idle models). `npm run ask -- --runs 5 "…"` asks through the real API and reports
-tools used and whether a visible answer came out.
+loaded first (now rarer: models stay loaded for an hour — see [Speed and resources](#speed-and-resources)).
+`npm run ask -- --runs 5 "…"` asks through the real API and reports tools used and whether a visible answer came out.
 
 Lessons learned:
 
@@ -305,6 +305,10 @@ image ──► browser: shrink to ≤ 1280 px, JPEG (web/src/lib/images.ts) ─
 - They run on the **CPU**: the GPU is reserved for the chat model. Models download from Hugging Face on first start
   (ASR ~1.9 GB, TTS ~2.5 GB) into a volume.
 - The UI shows the buttons only when `/api/voice/status` says the services are up.
+- **Loaded only while in use** (`voice/lazy_model.py`): a model loads on its first request (~9 s) and is unloaded
+  after 15 idle minutes (`UNLOAD_AFTER_SECONDS`), like Ollama's keep_alive. Idle, the two services use ~1.1 GB
+  instead of ~8 GB. Pressing 🎤 starts loading the speech-to-text model *while you talk* (`POST /api/voice/warm`
+  sends it half a second of silence), so it's ready when you stop.
 
 Measured on an i7-14700K (CPU only):
 
@@ -324,9 +328,55 @@ Lessons learned:
 - **More threads ≠ faster**: TTS with 4 threads ≈ 12 threads; 20 threads was 2× slower. It generates audio step by
   step, so per-step latency, not core count, is the limit.
 - **Size memory limits from peak, not idle**: TTS idles at ~4.2 GiB; with a 5 GiB limit, Kubernetes **OOMKilled** it
-  mid-request (and restarted it automatically). Limits are now 7–8 GiB.
+  mid-request (and restarted it automatically). Limits are now 7–8 GiB; *requests* are 1 GiB, since the model is only
+  in memory while it's used.
 - **Cap generation length**: TTS allowed up to 2048 audio frames (~170 s) by default; a run-away generation grows
   memory. It's now capped at ~2× the expected speech length.
+
+## Speed and resources
+
+Measured with `npm run ask` and the gateway's request log (`LiteLLM_SpendLogs`: tokens and timings of every model
+call). RTX 3080 10 GB, i7-14700K.
+
+| | Before | After | How |
+|---|---|---|---|
+| First message after a break | 13.4 s | 2.6 s | Models stay loaded 1 h (was 5 min); opening the app loads them |
+| Short answer ("say hi", "17 × 23") | 1.2–2.6 s | 0.5 s | **Think** off by default |
+| Question that reads a file | 2.2–2.6 s | 1.2 s | Think off |
+| Voice services, idle | ~8 GB RAM | ~1.1 GB | Load on use, unload after 15 min |
+| Docker disk | — | −5.5 GB | Pruned build cache and unused images |
+
+- **Think** (💡 in the message box): Qwen3.5 can reason before answering (the "Thoughts"). That costs 200–400
+  thought tokens per step — 2–4× slower — and, with thinking on, a turn sometimes ended with the answer *only* in
+  the thoughts. Off, it answered everything in the tests correctly (including the bat-and-ball trick question), so
+  off is the default; turn it on for harder questions. Technically an OpenCode model **variant**
+  (`fast`: `reasoningEffort: "none"`) chosen per message.
+- **keep_alive** (`gateway/config.yaml`, `extra_body`): Ollama unloads a model after 5 idle minutes; reloading the
+  9B took ~11 s of the first reply. Now 1 hour — set per request through the gateway, no change to Ollama itself.
+- **Warm-up** (`server/warmup.ts`): when the UI opens after 50+ idle minutes, the api sends a 1-token request to
+  the safety filter and the chat model, so they load while you type.
+- **Where the tokens go**: every agent step sends ~2,900 tokens before the conversation even starts — **~2,200 are
+  the 8 tool definitions** (OpenCode's descriptions of read, edit, grep…), ~700 the system prompt. That sounds
+  wasteful, but it's the same text every time, so Ollama reuses its cache (first token after ~0.1 s). What actually
+  costs time is *generated* tokens (thoughts) and extra steps.
+- **Tool output cap** (`tool_output` in `server/opencode.ts`): OpenCode lets one tool result be up to 2,000 lines /
+  50 KB (~12k tokens — 40% of our 32k context). Capped at 400 lines / 16 KB; longer output is saved to a file and
+  the model reads the rest in pieces.
+- **No wasted "nudge"**: the safety net for a missing answer fired on any reply under 20 characters — so a correct
+  "391" cost a second model call. It now fires only when the last step wrote nothing.
+
+Lessons learned:
+
+- **Measure before optimizing.** The obvious target (2,900 prompt tokens) turned out nearly free thanks to prefix
+  caching; the real costs were cold starts and thinking.
+- **Per-pod state is a guess.** Each api pod remembers when *it* last used the models; with two pods, one may warm
+  up needlessly. Harmless here (a 1-token request); a shared store would fix it.
+- **The gateway writes its request log in batches** — restarting it dropped the last minute of entries.
+- **Small classifiers have odd false positives**: "…tell me exactly what line 2500 says" about a file named
+  `zz-bigtest.txt` was tagged *Jailbreak* every time; the same sentence about `notes.md` was safe. The policy stays
+  strict (real jailbreaks are often labelled the same way).
+- **Still slow: speech output** (~3× slower than real time on the CPU). The fix is the GPU — which means budgeting
+  its 10 GB between the chat model and TTS, or a bigger GPU on AWS.
 
 ## Run in containers
 
@@ -351,9 +401,10 @@ Five images:
 | `seyl-ai/tts:dev` | `voice/tts/Dockerfile` | text-to-speech service (Python, CPU PyTorch) |
 | `seyl-ai/gateway:dev` | `gateway/Dockerfile` | LiteLLM with `gateway/config.yaml` baked in |
 
-Plus `postgres:16` for the gateway.
+Plus `pgvector/pgvector:0.8.6-pg16-trixie` (gateway + seyl-ai data) and `quay.io/keycloak/keycloak` (login).
 
-Docker Desktop needs ~12 GB of its memory for everything (the voice models take ~4.5 GB each, LiteLLM ~0.8 GB).
+Docker Desktop needs ~6 GB of its memory idle, ~14 GB while both voice models are loaded (~4 GB each; Keycloak
+~0.9 GB, LiteLLM ~0.6 GB).
 Run the stack in Compose **or** Kubernetes, not both at once.
 
 ### Docker Compose
@@ -467,7 +518,9 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `scripts/auth-setup.ts`, `scripts/auth-test.ts` | Configure Keycloak (`npm run auth:setup`); login security test (`npm run auth:test`) |
 | `scripts/lib/session.ts` | Cookie jar + scripted OIDC sign-in, used by the scripts |
 | `web/src/components/auth/LoginScreen.tsx`, `web/src/hooks/useAuth.ts` | Sign-in screen; who's signed in |
-| `scripts/ask.ts` | Ask through the real API, report tools and answer (`npm run ask -- [--runs N] "…"`) |
+| `scripts/ask.ts` | Ask through the real API, report time, thoughts, tools and answer (`npm run ask -- [--runs N] [--think] "…"`) |
+| `server/warmup.ts` | Load the models when the app opens after a long pause |
+| `voice/lazy_model.py` | Voice models: load on first use, unload when idle |
 | `web/src/App.tsx` | Page layout: sidebar + chat |
 | `web/src/hooks/` | `useChat` (history, live events, send, stop), `useConversations`, … |
 | `web/src/lib/` | API client, chat reducer, date grouping — plain functions, no React |
@@ -493,11 +546,12 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `POST /api/conversations` | Create one |
 | `DELETE /api/conversations/:id` | Delete one |
 | `GET /api/conversations/:id/messages` | History + whether the agent is still working |
-| `POST /api/conversations/:id/prompt` | Send a message: `{ text, images? }` (reply arrives on the event stream) |
+| `POST /api/conversations/:id/prompt` | Send a message: `{ text, images?, think? }` (reply arrives on the event stream) |
 | `POST /api/conversations/:id/permissions/:requestID` | Answer an approval request: `{ reply: "once" \| "always" \| "reject" }` |
 | `POST /api/conversations/:id/abort` | Stop the agent |
 | `GET /api/conversations/:id/events` | Live updates (Server-Sent Events) |
 | `GET /api/voice/status` | Which voice services are up (`{ asr, tts }`) |
+| `POST /api/voice/warm` | Start loading the speech-to-text model (🎤 was pressed) → `202` |
 | `POST /api/voice/transcribe` | Multipart audio (`file`) → `{ text, language }` |
 | `POST /api/voice/speak` | `{ text }` (markdown ok) → `audio/wav` |
 | `GET /api/documents` | The document library |

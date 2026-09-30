@@ -7,7 +7,6 @@ GET  /health
 
 import io
 import os
-import threading
 
 import soundfile as sf
 import torch
@@ -15,6 +14,8 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from qwen_tts import Qwen3TTSModel
+
+from lazy_model import LazyModel
 
 MODEL_ID = os.environ.get("TTS_MODEL", "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice")
 MAX_CHARS = int(os.environ.get("TTS_MAX_CHARS", "1000"))
@@ -36,9 +37,12 @@ VOICES = {
 # step by step, so it is limited by per-step latency, not by the number of cores.
 torch.set_num_threads(int(os.environ.get("TORCH_THREADS", "4")))
 
+# Loaded on first use, unloaded after UNLOAD_AFTER_SECONDS idle (0 = keep it) — see lazy_model.py.
 # CPU + float32: this container leaves the GPU to the chat model.
-model = Qwen3TTSModel.from_pretrained(MODEL_ID, device_map="cpu", dtype=torch.float32)
-lock = threading.Lock()
+model = LazyModel(
+    lambda: Qwen3TTSModel.from_pretrained(MODEL_ID, device_map="cpu", dtype=torch.float32),
+    idle_seconds=float(os.environ.get("UNLOAD_AFTER_SECONDS", "900")),
+)
 
 app = FastAPI(title="seyl-ai TTS")
 
@@ -62,14 +66,15 @@ def max_frames(text: str) -> int:
 
 def synthesize(req: SpeechRequest) -> bytes:
     text = req.input[:MAX_CHARS]
-    with lock:
-        wavs, sample_rate = model.generate_custom_voice(
+    wavs, sample_rate = model.run(
+        lambda m: m.generate_custom_voice(
             text=text,
             language=req.language,
             speaker=req.voice,
             instruct=req.instructions,
             max_new_tokens=max_frames(text),
         )
+    )
     buffer = io.BytesIO()
     sf.write(buffer, wavs[0], sample_rate, format="WAV")
     return buffer.getvalue()
@@ -77,7 +82,7 @@ def synthesize(req: SpeechRequest) -> bytes:
 
 @app.get("/health")
 def health():
-    return {"ok": True, "model": MODEL_ID}
+    return {"ok": True, "model": MODEL_ID, "loaded": model.loaded}
 
 
 @app.get("/v1/voices")

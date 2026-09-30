@@ -50,7 +50,7 @@ spec:
             timeoutSeconds: 5
           # Measured: ~4.2 GiB idle, more while generating; 5 GiB got OOMKilled. Size limits from PEAK usage, not idle.
           resources:
-            requests: { cpu: "1", memory: 5Gi }
+            requests: { cpu: "1", memory: 1Gi } # the model (~4 GB) is only loaded while in use
             limits: { memory: 8Gi }
       volumes:
         - name: models

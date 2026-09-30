@@ -17,7 +17,9 @@ export function MicButton({ onText, onError, disabled }: Props) {
 
   const toggle = async () => {
     if (!recording) {
-      await start().catch(() => onError("Microphone not available — check the browser's permission."));
+      await start()
+        .then(() => api.warmVoice()) // load the model while you talk
+        .catch(() => onError("Microphone not available — check the browser's permission."));
       return;
     }
     const audio = await stop();

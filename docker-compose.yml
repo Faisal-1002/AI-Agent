@@ -103,14 +103,14 @@ services:
 
   # Speech-to-text (Qwen3-ASR 0.6B, CPU). Only the gateway talks to it.
   asr:
-    build: voice/asr
+    build: { context: voice, dockerfile: asr/Dockerfile } # context: voice/ for the shared lazy_model.py
     image: seyl-ai/asr:dev
     volumes:
       - asr-models:/models # model weights, downloaded once
 
   # Text-to-speech (Qwen3-TTS 0.6B, CPU). Only the gateway talks to it.
   tts:
-    build: voice/tts
+    build: { context: voice, dockerfile: tts/Dockerfile }
     image: seyl-ai/tts:dev
     volumes:
       - tts-models:/models

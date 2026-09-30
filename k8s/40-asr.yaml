@@ -52,7 +52,7 @@ spec:
             timeoutSeconds: 5
           # Measured: ~4.5 GiB after serving requests. Size limits from PEAK usage, not idle.
           resources:
-            requests: { cpu: "1", memory: 4Gi }
+            requests: { cpu: "1", memory: 1Gi } # the model (~3.5 GB) is only loaded while in use
             limits: { memory: 7Gi }
       volumes:
         - name: models

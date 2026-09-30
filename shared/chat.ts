@@ -38,6 +38,9 @@ export type User = { sub: string; name: string; email?: string; username?: strin
 // An image attached to a message (already resized in the browser).
 export type ImageAttachment = { name: string; mime: string; dataUrl: string };
 
+// POST /api/conversations/:id/prompt. think: true = reason first (slower; default off).
+export type PromptRequest = { text?: string; images?: ImageAttachment[]; think?: boolean };
+
 // An uploaded document in the searchable library (server/documents.ts).
 export type DocumentInfo = {
   id: string;

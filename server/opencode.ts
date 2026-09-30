@@ -38,6 +38,7 @@ const MAIN_MODEL = "qwen3.5-9b"; // chat, agent loop, tools, images
 const SMALL_MODEL = "qwen3.5-0.8b"; // quick jobs such as chat titles
 
 export const MODEL = { providerID: "gateway", modelID: MAIN_MODEL };
+export const FAST_VARIANT = "fast"; // the main model without thinking (see variants below)
 
 // seyl-ai's own agent: its system prompt (server/prompts/seyl-ai.md) replaces OpenCode's
 // built-in coding prompt, and it may only use the read-only tools below.
@@ -49,6 +50,10 @@ export const MODEL_INFO: ModelInfo = { provider: "LiteLLM", name: "Qwen3.5 9B", 
 // Same shape as an opencode.json file.
 export const config: Config = {
   share: "disabled",
+  // Every tool result goes into the model's context. OpenCode's default cap (2,000 lines /
+  // 50 KB ≈ 12k tokens) suits 200k-token cloud models; ours has 32k. Longer output is saved
+  // to a file and the model is told to read the rest in pieces (read with offset, grep).
+  tool_output: { max_lines: 400, max_bytes: 16 * 1024 },
   autoupdate: false,
   model: `gateway/${MAIN_MODEL}`,
   // Titles etc. go to a tiny model, so they don't queue behind the main one.
@@ -66,6 +71,9 @@ export const config: Config = {
           attachment: true, // can receive images
           modalities: { input: ["text", "image"], output: ["text"] },
           limit: { context: 32768, output: 8192 },
+          // Qwen3.5 thinks before it answers (the "Thoughts" in the UI). Better on hard
+          // questions, but every thought token costs time. "fast" answers straight away.
+          variants: { fast: { reasoningEffort: "none" } },
         },
         [SMALL_MODEL]: {
           name: "Qwen3.5 0.8B",

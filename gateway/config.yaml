@@ -4,12 +4,16 @@
 #
 # Backend addresses come from environment variables (set in docker-compose.yml / k8s/).
 
+# keep_alive: Ollama unloads a model after 5 idle minutes by default; loading the 9B again
+# costs ~10 s on the next message. Keep models in memory for an hour instead.
+
 model_list:
   # Chat — served by Ollama on the host GPU (its OpenAI-compatible /v1 API).
   - model_name: qwen3.5-9b
     litellm_params:
       model: openai/seyl-qwen3.5-9b
       api_base: os.environ/OLLAMA_API_BASE
+      extra_body: { keep_alive: 1h }
       api_key: ollama # Ollama ignores it; the OpenAI client requires one
     model_info:
       mode: chat
@@ -21,6 +25,7 @@ model_list:
     litellm_params:
       model: openai/seyl-qwen3.5-0.8b
       api_base: os.environ/OLLAMA_API_BASE
+      extra_body: { keep_alive: 1h }
       api_key: ollama
     model_info:
       mode: chat
@@ -30,6 +35,7 @@ model_list:
     litellm_params:
       model: openai/seyl-qwen3guard-0.6b
       api_base: os.environ/OLLAMA_API_BASE
+      extra_body: { keep_alive: 1h }
       api_key: ollama
     model_info:
       mode: chat
@@ -39,6 +45,7 @@ model_list:
     litellm_params:
       model: openai/seyl-qwen3-embedding-0.6b
       api_base: os.environ/OLLAMA_API_BASE
+      extra_body: { keep_alive: 1h }
       api_key: ollama
     model_info:
       mode: embedding

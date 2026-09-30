@@ -26,9 +26,10 @@ const KEYS = [
   {
     key: required("LITELLM_KEY_API"),
     key_alias: "api",
-    models: ["qwen3-asr", "qwen3-tts", "qwen3-guard", "qwen3-embedding"],
+    // qwen3.5-9b: only to load it into memory ahead of time (1-token requests, server/warmup.ts).
+    models: ["qwen3-asr", "qwen3-tts", "qwen3-guard", "qwen3-embedding", "qwen3.5-9b"],
     rpm_limit: 300, // a runaway client can't flood the CPU-bound models (indexing sends batches)
-    metadata: { purpose: "Voice, the safety filter and document embeddings, called by the seyl-ai API" },
+    metadata: { purpose: "Voice, the safety filter, document embeddings and model warm-up, called by the seyl-ai API" },
   },
 ];
 

@@ -1,19 +1,30 @@
-import { Paperclip, X } from "lucide-react";
+import { Lightbulb, Paperclip, X } from "lucide-react";
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent } from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import type { ImageAttachment } from "../../../../shared/chat";
 import { isImage, prepareImage } from "../../lib/images";
+import { cn } from "../../lib/cn";
 import { IconButton } from "../ui/IconButton";
 import { ComposerButton } from "./ComposerButton";
 import { MicButton } from "./MicButton";
 
 const MAX_IMAGES = 4;
+const THINK_KEY = "seyl.think";
+
+// "Think" is remembered per browser; storage can be unavailable (private mode), hence try/catch.
+const savedThink = () => {
+  try {
+    return localStorage.getItem(THINK_KEY) === "on";
+  } catch {
+    return false;
+  }
+};
 
 type Props = {
   busy: boolean;
   canTranscribe: boolean; // speech-to-text service is up → show the 🎤 button
   canAttachImages: boolean; // the model can see images → show the 📎 button
-  onSend: (text: string, images: ImageAttachment[]) => Promise<boolean>; // false = refused (e.g. by the safety filter)
+  onSend: (text: string, images: ImageAttachment[], think: boolean) => Promise<boolean>; // false = refused (e.g. by the safety filter)
   onStop: () => void;
 };
 
@@ -23,6 +34,8 @@ export function ChatForm({ busy, canTranscribe, canAttachImages, onSend, onStop 
   const [text, setText] = useState("");
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [hint, setHint] = useState<string>();
+  // Off by default: answers come 2–4x faster. On: the model reasons first ("Thoughts").
+  const [think, setThink] = useState(savedThink);
   const fileInput = useRef<HTMLInputElement>(null);
   const canSend = (text.trim().length > 0 || images.length > 0) && !busy;
 
@@ -50,10 +63,19 @@ export function ChatForm({ busy, canTranscribe, canAttachImages, onSend, onStop 
     setText("");
     setImages([]);
     // If the message was refused, give it back so nothing is lost.
-    onSend(sentText, sentImages).then((ok) => {
+    onSend(sentText, sentImages, think).then((ok) => {
       if (ok) return;
       setText((current) => current || sentText);
       setImages((current) => (current.length ? current : sentImages));
+    });
+  };
+
+  const toggleThink = () => {
+    setThink((on) => {
+      try {
+        localStorage.setItem(THINK_KEY, on ? "off" : "on");
+      } catch {}
+      return !on;
     });
   };
 
@@ -135,6 +157,21 @@ export function ChatForm({ busy, canTranscribe, canAttachImages, onSend, onStop 
             maxRows={12}
             className={`my-1.5 flex-1 resize-none bg-transparent leading-6 text-text-primary placeholder:text-text-tertiary focus:outline-none ${canAttachImages ? "pl-1" : "pl-3"}`}
           />
+          <button
+            type="button"
+            onClick={toggleThink}
+            aria-pressed={think}
+            title={think ? "Thinking on: slower, reasons step by step first" : "Think before answering (slower, for harder questions)"}
+            className={cn(
+              "mb-0.5 inline-flex h-8 shrink-0 items-center gap-1 rounded-full border px-2.5 text-sm transition-colors",
+              think
+                ? "border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary",
+            )}
+          >
+            <Lightbulb className="size-4" />
+            <span>Think</span>
+          </button>
           {canTranscribe && (
             <MicButton
               // Spoken words are added to the box, so you can check them before sending.
