@@ -50,6 +50,72 @@ npm run dev
 
 Then open http://localhost:5173 and ask something like *"Read notes.md and tell me the project codename."*
 
+## Run in containers
+
+Needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) (WSL 2 engine on Windows). Ollama keeps running on the host because it needs the GPU; containers reach it at `host.docker.internal:11434`.
+
+```
+            ┌──────────── Kubernetes (namespace seyl-ai) ────────────┐
+Browser ──► │ web ×2 (nginx)  ──/api──►  api ×2  ──►  harness ×1      │ ──► Ollama on the host (GPU)
+:8080       │ LoadBalancer               Service      Service + disk   │
+            └────────────────────────────────────────────────────────┘
+```
+
+Two images, built from `deploy/`:
+
+| Image | Built from | Runs |
+|---|---|---|
+| `seyl-ai/app:dev` | `deploy/app.Dockerfile` | the **api** (default command) *or* the **harness** (`server/harness.ts`) |
+| `seyl-ai/web:dev` | `deploy/web.Dockerfile` | nginx serving the built UI, proxying `/api` → `api:3000` (`deploy/nginx.conf`) |
+
+### Docker Compose
+
+```bash
+docker compose up --build -d
+```
+
+Open http://localhost:8080. Stop with `docker compose down` (chats are kept in the `opencode-data` volume).
+
+### Kubernetes (Docker Desktop)
+
+Enable Kubernetes in Docker Desktop (kubeadm), build the images, then:
+
+```bash
+docker compose build
+kubectl apply -f k8s/
+kubectl -n seyl-ai get pods,svc
+```
+
+Open http://localhost:8080. Things to try:
+
+```bash
+kubectl -n seyl-ai delete pod -l app=api          # self-healing: new pods replace them
+kubectl -n seyl-ai scale deployment/api --replicas=3
+kubectl -n seyl-ai logs deploy/harness
+kubectl delete namespace seyl-ai                  # remove everything
+```
+
+After changing code: `docker compose build` then `kubectl -n seyl-ai rollout restart deployment`.
+
+| Manifest | Contents |
+|---|---|
+| `k8s/00-namespace.yaml` | the `seyl-ai` namespace |
+| `k8s/10-harness.yaml` | harness Deployment (1 replica, `Recreate`), 1 GiB PersistentVolumeClaim for sessions, ClusterIP Service |
+| `k8s/20-api.yaml` | api Deployment (2 replicas) with readiness (`/api/readyz`) and liveness (`/api/healthz`) probes, ClusterIP Service |
+| `k8s/30-web.yaml` | web Deployment (2 replicas), LoadBalancer Service on port 8080 |
+
+### Configuration
+
+All settings are environment variables with local-dev defaults (`server/opencode.ts`, `server/index.ts`):
+
+| Variable | Default | Used by |
+|---|---|---|
+| `PORT` | `3000` | api |
+| `OPENCODE_URL` | `http://127.0.0.1:4097` | api → harness |
+| `OPENCODE_HOSTNAME` / `OPENCODE_PORT` | `127.0.0.1` / `4097` | harness |
+| `OLLAMA_URL` | `http://localhost:11434` | harness → Ollama |
+| `SEYL_WORKSPACE` | `./workspace` | folder the agent works in (path inside the harness) |
+
 ## Project layout
 
 | Path | What it is |

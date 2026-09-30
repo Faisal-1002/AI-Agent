@@ -1,0 +1,35 @@
+# Run the whole stack in containers:   docker compose up --build
+# Then open http://localhost:8080
+# Ollama stays on your PC (it needs the GPU); containers reach it via host.docker.internal.
+
+services:
+  harness:
+    build: { context: ., dockerfile: deploy/app.Dockerfile }
+    image: seyl-ai/app:dev
+    command: ["node", "--import", "tsx", "server/harness.ts"]
+    environment:
+      OLLAMA_URL: http://host.docker.internal:11434
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes:
+      - opencode-data:/data # sessions survive restarts
+    # Not published to the PC: only other containers can talk to the harness.
+
+  api:
+    image: seyl-ai/app:dev
+    environment:
+      OPENCODE_URL: http://harness:4097
+    depends_on: [harness]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build: { context: ., dockerfile: deploy/web.Dockerfile }
+    image: seyl-ai/web:dev
+    ports: ["8080:80"]
+    depends_on: [api]
+
+volumes:
+  opencode-data:

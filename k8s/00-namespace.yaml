@@ -1,0 +1,6 @@
+# A namespace is a folder for Kubernetes objects: everything seyl-ai lives in "seyl-ai",
+# so `kubectl delete namespace seyl-ai` removes it all.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: seyl-ai

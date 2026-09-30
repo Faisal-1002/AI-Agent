@@ -5,7 +5,7 @@ import type { ChatEvent, ModelInfo } from "../shared/chat.js";
 import { client, MODEL, MODEL_INFO } from "./opencode.js";
 import { sessionOf, toChatEvent, toChatMessage, toConversation } from "./translate.js";
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT ?? 3000);
 const app = new Hono();
 
 // OpenCode SDK calls return { data, error } instead of throwing; these turn
@@ -21,6 +21,15 @@ function unwrap<T>(result: { data?: T; error?: unknown }): T {
   if (result.data === undefined) throw new Error("OpenCode request returned no data");
   return result.data;
 }
+
+// Health checks, used by Docker and Kubernetes:
+// - healthz: "is this process alive?" (if not, restart it)
+// - readyz:  "can it serve traffic?" (only if the OpenCode harness answers)
+app.get("/api/healthz", (c) => c.json({ ok: true }));
+app.get("/api/readyz", async (c) => {
+  const { error } = await client.session.status({}).catch((err: Error) => ({ error: err.message }));
+  return error === undefined ? c.json({ ok: true }) : c.json({ ok: false, error }, 503);
+});
 
 app.get("/api/model", (c) => c.json<ModelInfo>(MODEL_INFO));
 
@@ -93,6 +102,15 @@ app.get("/api/conversations/:id/events", (c) => {
   });
 });
 
-serve({ fetch: app.fetch, port: PORT }, () => {
+const server = serve({ fetch: app.fetch, port: PORT }, () => {
   console.log(`seyl-ai backend running at http://localhost:${PORT}`);
+});
+
+// Graceful shutdown: Docker/Kubernetes send SIGTERM before stopping a container.
+// Stop accepting new requests, then exit (open event streams are cut after 5s;
+// browsers reconnect to another instance automatically).
+process.on("SIGTERM", () => {
+  console.log("SIGTERM received, shutting down");
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 5_000).unref();
 });

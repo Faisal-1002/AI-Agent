@@ -1,0 +1,74 @@
+# The OpenCode harness. Stateful: it stores sessions on disk, so it runs as ONE
+# replica with a persistent volume (scaling it needs shared storage — a later lesson).
+
+# PersistentVolumeClaim = "I need 1 GiB of disk that survives pod restarts".
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: opencode-data
+  namespace: seyl-ai
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Deployment = "keep N copies of this container running; replace them if they die".
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: harness
+  namespace: seyl-ai
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # stop the old pod before starting the new one (they can't share the disk)
+  selector:
+    matchLabels: { app: harness }
+  template:
+    metadata:
+      labels: { app: harness }
+    spec:
+      securityContext:
+        fsGroup: 1000 # the volume is writable by the "node" user (uid 1000)
+      containers:
+        - name: harness
+          image: seyl-ai/app:dev
+          imagePullPolicy: IfNotPresent # use the locally built image
+          command: ["node", "--import", "tsx", "server/harness.ts"]
+          env:
+            - name: OLLAMA_URL
+              value: http://host.docker.internal:11434 # Ollama on your PC
+          ports:
+            - containerPort: 4097
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe: # only send traffic once OpenCode is listening
+            tcpSocket: { port: 4097 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe: # restart the container if it stops responding
+            tcpSocket: { port: 4097 }
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: opencode-data
+---
+# Service = a stable name + address for the pods. Other pods reach it at http://harness:4097.
+# ClusterIP (the default) means: reachable only from inside the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: harness
+  namespace: seyl-ai
+spec:
+  selector: { app: harness }
+  ports:
+    - port: 4097
+      targetPort: 4097
