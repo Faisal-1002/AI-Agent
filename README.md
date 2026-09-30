@@ -19,7 +19,8 @@ LiteLLM gateway               localhost:4000   gateway/      one front door to e
    │
    ├─▶ Ollama (host)  ─▶ Qwen3.5 9B   (GPU, 32k context)   main model: agent loop, tools, images
    │                  ├▶ Qwen3.5 0.8B (CPU, no thinking)   small model: chat titles
-   │                  └▶ Qwen3Guard 0.6B (CPU)             safety classifier
+   │                  ├▶ Qwen3Guard 0.6B (CPU)             safety classifier
+   │                  └▶ Qwen3-Embedding 0.6B (CPU)        document search vectors
    ├─▶ voice/asr      ─▶ Qwen3-ASR 0.6B (CPU)              speech-to-text
    └─▶ voice/tts      ─▶ Qwen3-TTS 0.6B (CPU)              text-to-speech
 ```
@@ -50,6 +51,8 @@ ollama create seyl-qwen3.5-9b -f ollama/qwen3.5-9b.Modelfile
 ollama create seyl-qwen3.5-0.8b -f ollama/qwen3.5-0.8b.Modelfile
 ollama pull hf.co/mradermacher/Qwen3Guard-Gen-0.6B-GGUF:Q8_0
 ollama create seyl-qwen3guard-0.6b -f ollama/qwen3guard-0.6b.Modelfile
+ollama pull qwen3-embedding:0.6b
+ollama create seyl-qwen3-embedding-0.6b -f ollama/qwen3-embedding-0.6b.Modelfile
 ```
 
 Secrets: copy `.env.example` to `.env` and fill in long random values. `.env` is git-ignored; nothing
@@ -62,6 +65,7 @@ secret is committed.
 | `seyl-qwen3.5-9b` | GPU, 6.5 GB incl. 32k context | ~79 tokens/s | Agent loop, tools, thinking, images. Hybrid attention keeps long context cheap. |
 | `seyl-qwen3.5-0.8b` | CPU (`num_gpu 0`) | title in ~3 s | Titles. Thinking disabled with `reasoningEffort: "none"`. |
 | `seyl-qwen3guard-0.6b` | CPU (`num_gpu 0`) | ~0.5 s per check | Safety classifier ([Safety](#safety)). GGUF conversion of the official Apache-2.0 model. |
+| `seyl-qwen3-embedding-0.6b` | CPU (`num_gpu 0`) | 16 chunks in ~0.3 s (warm) | Document search ([Documents](#documents-rag)). 1024-dimension vectors, multilingual. |
 
 Lesson learned: with both models on a 10 GB GPU (plus the Windows desktop), VRAM overflowed and Windows
 spilled it into system RAM — generation dropped from ~46 to ~1 token/s. Keep the GPU for one model and put
@@ -74,6 +78,7 @@ The app runs locally; the model side (gateway, its database, voice services) run
 ```bash
 docker compose up -d litellm asr tts
 npm run gateway:keys
+npm run db:setup
 npm run dev
 ```
 
@@ -89,7 +94,7 @@ Moving a model (say, Ollama → Amazon Bedrock) is a change to that one file.
 | Key (from `.env`) | Alias | May use | Used by |
 |---|---|---|---|
 | `LITELLM_KEY_HARNESS` | `harness` | `qwen3.5-9b`, `qwen3.5-0.8b` | the OpenCode harness |
-| `LITELLM_KEY_API` | `api` | `qwen3-guard`, `qwen3-asr`, `qwen3-tts` (120 requests/min) | the backend's safety filter and voice routes |
+| `LITELLM_KEY_API` | `api` | `qwen3-guard`, `qwen3-embedding`, `qwen3-asr`, `qwen3-tts` (300 requests/min) | the backend's safety filter, document indexing/search and voice |
 | `LITELLM_MASTER_KEY` | admin | everything | only `scripts/gateway-keys.ts` and the admin UI |
 
 - **Least privilege**: the harness key calling a voice model → `403`; the voice key calling chat → `403`; no key → `401`.
@@ -155,6 +160,47 @@ Lessons learned:
   variants, which have safety removed) — hence the evaluation set.
 
 `workspace/customers.csv` holds obviously fake personal data for testing the reply check.
+
+## Documents (RAG)
+
+"Chat with your documents": upload files in the **Documents** panel (sidebar); the agent searches them when a
+question needs them.
+
+```
+upload ──► api: extract text (PDF, Word, md, txt, csv, json, html) ──► chunks (~1,200 chars, 200 overlap)
+       ──► Qwen3-Embedding (via the gateway) ──► Postgres + pgvector (database "seyl", HNSW index)
+
+agent ──► MCP tool docs_search_documents ──► api /mcp ──► nearest chunks by meaning ──► answer, naming the file
+```
+
+- **Agentic RAG**: instead of pasting search results into every message, the agent gets **tools** — search,
+  list, read a document page by page — and decides when to use them (it often refines its query and searches twice).
+- **MCP** (Model Context Protocol, `server/mcp.ts`): the open standard for agent tools. OpenCode connects to it as
+  a remote MCP server (`mcp.docs` in `server/opencode.ts`); any MCP client could use the same tools. It lives at
+  `/mcp` — outside `/api`, so nginx never exposes it — and requires the `SEYL_MCP_TOKEN` bearer token.
+- **pgvector** instead of a separate vector database: one Postgres (on AWS: RDS/Aurora with pgvector). seyl-ai
+  has its **own database and user** (`npm run db:setup`); the gateway's admin user isn't used by the app.
+- **Asymmetric embeddings**: Qwen3-Embedding expects questions with an instruction prefix and documents without.
+  Search works across languages — an Arabic question found and answered from an English document.
+- Documents live in the database, not on disk: the api stays stateless (any replica can serve any request).
+
+Measured: the README (20 KB) → 23 passages; indexing takes ~2 s warm, ~17 s when the embedding model has to be
+loaded first (Ollama unloads idle models). `npm run ask -- --runs 5 "…"` asks through the real API and reports
+tools used and whether a visible answer came out.
+
+Lessons learned:
+
+- **Upgrading a database image can change more than the database.** `postgres:16` runs on Debian 13 (glibc 2.41);
+  the default `pgvector` image on Debian 12 (glibc 2.36). Same Postgres, different *text sorting rules* — Postgres
+  warned of a **collation version mismatch** and refused to create databases. Fix: the pgvector image built on the
+  same Debian (`0.8.6-pg16-trixie`), pinned.
+- **Thinking models sometimes leave the answer in their thoughts.** After tool calls, Qwen3.5 occasionally ended a
+  turn with the answer only in its (hidden) reasoning — 2 of 3 runs answered visibly. A system-prompt instruction
+  fixed most of it (5/5); a **harness safety net** catches the rest: if a turn ends without a visible answer, the
+  backend sends one hidden follow-up ("write your final answer now") — it fired once in 5 runs and recovered it.
+- **Small models wander**: the agent sometimes looks for uploaded documents with `glob`/`read` first, wasting
+  steps. Clearer tool descriptions help; it's a target for the optimization phase.
+- **Measure, don't guess**: every change above was checked with repeated runs, not one lucky answer.
 
 ## Voice
 
@@ -225,6 +271,7 @@ Run the stack in Compose **or** Kubernetes, not both at once.
 ```bash
 docker compose up --build -d
 npm run gateway:keys
+npm run db:setup
 ```
 
 Open http://localhost:8080. Stop with `docker compose down` (chats are kept in the `opencode-data` volume).
@@ -245,6 +292,8 @@ The in-cluster gateway has its own database, so register the keys once, through 
 ```bash
 kubectl -n seyl-ai port-forward svc/litellm 4001:4000
 GATEWAY_URL=http://127.0.0.1:4001 npm run gateway:keys
+kubectl -n seyl-ai port-forward svc/db 5433:5432
+DB_PORT=5433 npm run db:setup
 ```
 
 Open http://localhost:8080. Things to try:
@@ -265,7 +314,7 @@ After changing code: `docker compose build` then `kubectl -n seyl-ai rollout res
 | `k8s/20-api.yaml` | api Deployment (2 replicas) with readiness + liveness probes on `/api/healthz`, `preStop` pause, ClusterIP Service |
 | `k8s/30-web.yaml` | web Deployment (2 replicas), `preStop` pause, LoadBalancer Service on port 8080 |
 | `k8s/40-asr.yaml`, `k8s/50-tts.yaml` | voice Deployments (1 replica each) with a 5 GiB volume for the model, a `startupProbe` that allows 10 min for the first download, memory limits sized from peak usage |
-| `k8s/60-postgres.yaml` | Postgres for the gateway (1 replica, 2 GiB volume); on AWS this would be a managed database (RDS) |
+| `k8s/60-postgres.yaml` | Postgres 16 + pgvector (`0.8.6-pg16-trixie`, 1 replica, 2 GiB volume): the gateway's database and seyl-ai's documents; on AWS a managed database (RDS) |
 | `k8s/70-litellm.yaml` | the gateway: secrets from the Secret, `DATABASE_URL` composed with `$(POSTGRES_PASSWORD)`, readiness = gateway + database up, not exposed outside the cluster |
 | `kustomization.yaml` | lists the manifests; generates the `seyl-secrets` Secret from `.env` (hash-suffixed name, references rewritten) |
 
@@ -292,6 +341,9 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `TORCH_THREADS` | `8` (asr) / `4` (tts) | voice services: CPU threads |
 | `GUARD_MODE` | `enforce` | api: `enforce` / `monitor` / `off` ([Safety](#safety)) |
 | `GUARD_STRICT` | `false` | api: also block *Controversial* messages |
+| `SEYL_DB_HOST` / `SEYL_DB_PORT` / `SEYL_DB_PASSWORD` | `127.0.0.1` / `5432` / from `.env` | api: seyl-ai's own database |
+| `SEYL_API_URL` | `http://127.0.0.1:3000` | harness → the api's MCP tool server |
+| `SEYL_MCP_TOKEN` | from `.env` | harness ↔ api: bearer token for `/mcp` |
 
 ## Project layout
 
@@ -311,6 +363,10 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `server/guard-template.json` | Qwen3Guard's official moderation prompt (from `scripts/guard-template.ts`) |
 | `server/prompts/seyl-ai.md` | The agent's system prompt |
 | `scripts/guard-eval.ts` | Safety filter evaluation (`npm run guard:eval`) |
+| `server/documents.ts`, `server/chunk.ts`, `server/db.ts` | Document library: extraction, chunking, embeddings, pgvector search; database connection + tables |
+| `server/mcp.ts` | MCP tool server for the agent (search / list / read documents) |
+| `scripts/db-setup.ts` | Creates seyl-ai's database, user and the pgvector extension (`npm run db:setup`) |
+| `scripts/ask.ts` | Ask through the real API, report tools and answer (`npm run ask -- [--runs N] "…"`) |
 | `web/src/App.tsx` | Page layout: sidebar + chat |
 | `web/src/hooks/` | `useChat` (history, live events, send, stop), `useConversations`, … |
 | `web/src/lib/` | API client, chat reducer, date grouping — plain functions, no React |
@@ -319,6 +375,7 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `web/src/components/nav/` | `Sidebar`, `ConversationItem` |
 | `web/src/components/input/` | `ChatForm`, `ComposerButton`, `MicButton` (🎤) |
 | `web/src/components/chat/SpeakButton.tsx` | 🔊 read aloud, via the shared player in `web/src/lib/speaker.ts` |
+| `web/src/components/documents/DocumentsPanel.tsx` | Document library: upload (drag & drop), indexing status, delete |
 | `ollama/*.Modelfile` | Model variants: Qwen3.5 9B (32k context), Qwen3.5 0.8B (CPU); the old Qwen3 8B for reference |
 | `workspace/` | The only folder the agent can see |
 
@@ -337,6 +394,10 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `GET /api/voice/status` | Which voice services are up (`{ asr, tts }`) |
 | `POST /api/voice/transcribe` | Multipart audio (`file`) → `{ text, language }` |
 | `POST /api/voice/speak` | `{ text }` (markdown ok) → `audio/wav` |
+| `GET /api/documents` | The document library |
+| `POST /api/documents` | Multipart `file` (≤ 20 MB) → stored, indexed in the background |
+| `DELETE /api/documents/:id` | Remove a document and its passages |
+| `POST /mcp` | MCP endpoint for the harness (bearer token; not proxied by nginx) |
 
 ## Credits
 

@@ -31,6 +31,18 @@ export type Conversation = { id: string; title: string; updatedAt: number };
 
 export type ModelInfo = { provider: string; name: string };
 
+// An uploaded document in the searchable library (server/documents.ts).
+export type DocumentInfo = {
+  id: string;
+  name: string;
+  type: string; // file extension, e.g. "pdf"
+  size: number; // bytes
+  status: "indexing" | "ready" | "failed";
+  error?: string;
+  chunks: number;
+  createdAt: string;
+};
+
 // Which voice services are reachable (speech-to-text, text-to-speech).
 export type VoiceStatus = { asr: boolean; tts: boolean };
 

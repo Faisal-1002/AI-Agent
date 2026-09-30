@@ -12,6 +12,8 @@ services:
     environment:
       LLM_GATEWAY_URL: http://litellm:4000
       LITELLM_KEY_HARNESS: ${LITELLM_KEY_HARNESS}
+      SEYL_API_URL: http://api:3000 # the api's MCP tool server
+      SEYL_MCP_TOKEN: ${SEYL_MCP_TOKEN}
     volumes:
       - opencode-data:/data # sessions survive restarts
     depends_on: [litellm]
@@ -23,6 +25,9 @@ services:
       OPENCODE_URL: http://harness:4097
       LLM_GATEWAY_URL: http://litellm:4000
       LITELLM_KEY_API: ${LITELLM_KEY_API}
+      SEYL_DB_HOST: db
+      SEYL_DB_PASSWORD: ${SEYL_DB_PASSWORD}
+      SEYL_MCP_TOKEN: ${SEYL_MCP_TOKEN}
     depends_on: [harness]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
@@ -55,13 +60,15 @@ services:
     depends_on:
       db: { condition: service_healthy }
 
-  # Postgres for the gateway: virtual keys, spend and request logs.
+  # Postgres (with pgvector): the gateway's keys and logs, and seyl-ai's documents + vectors
+  # (separate databases and users; npm run db:setup). Published on localhost for npm run dev.
   db:
-    image: postgres:16
+    image: pgvector/pgvector:0.8.6-pg16-trixie # same Debian as the data was created on (collation!)
     environment:
       POSTGRES_DB: litellm
       POSTGRES_USER: litellm
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports: ["127.0.0.1:5432:5432"]
     volumes:
       - gateway-db:/var/lib/postgresql/data
     healthcheck:

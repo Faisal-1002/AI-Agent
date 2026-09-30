@@ -3,6 +3,7 @@ import { ChatHeader } from "./components/chat/ChatHeader";
 import { Landing } from "./components/chat/Landing";
 import { MessageList } from "./components/chat/MessageList";
 import { ChatForm } from "./components/input/ChatForm";
+import { DocumentsPanel } from "./components/documents/DocumentsPanel";
 import { Sidebar } from "./components/nav/Sidebar";
 import { useChat } from "./hooks/useChat";
 import { useConversations } from "./hooks/useConversations";
@@ -13,6 +14,7 @@ import { useVoiceStatus } from "./hooks/useVoiceStatus";
 export function App() {
   const wide = useMediaQuery("(min-width: 768px)");
   const [sidebarOpen, setSidebarOpen] = useState(wide);
+  const [documentsOpen, setDocumentsOpen] = useState(false);
   const [activeId, setActiveId] = useState<string>();
   const model = useModel();
   const voice = useVoiceStatus();
@@ -58,6 +60,7 @@ export function App() {
         onNewChat={() => select(undefined)}
         onSelect={select}
         onDelete={deleteConversation}
+        onOpenDocuments={() => setDocumentsOpen(true)}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -87,6 +90,7 @@ export function App() {
           seyl-ai runs locally on your PC and can make mistakes.
         </p>
       </main>
+      {documentsOpen && <DocumentsPanel onClose={() => setDocumentsOpen(false)} />}
     </div>
   );
 }

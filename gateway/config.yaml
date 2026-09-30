@@ -34,6 +34,15 @@ model_list:
     model_info:
       mode: chat
 
+  # Embeddings — Qwen3-Embedding on Ollama (CPU): text → 1024 numbers, for document search.
+  - model_name: qwen3-embedding
+    litellm_params:
+      model: openai/seyl-qwen3-embedding-0.6b
+      api_base: os.environ/OLLAMA_API_BASE
+      api_key: ollama
+    model_info:
+      mode: embedding
+
   # Speech-to-text — our voice/asr service (OpenAI /v1/audio/transcriptions).
   - model_name: qwen3-asr
     litellm_params:

@@ -24,6 +24,10 @@ export const OPENCODE_URL = env.OPENCODE_URL ?? `http://127.0.0.1:${OPENCODE_POR
 export const LLM_GATEWAY_URL = env.LLM_GATEWAY_URL ?? "http://127.0.0.1:4000";
 const HARNESS_KEY = env.LITELLM_KEY_HARNESS;
 
+// seyl-ai's MCP tool server (server/mcp.ts, in the api) — the agent's document tools.
+const SEYL_API_URL = env.SEYL_API_URL ?? "http://127.0.0.1:3000";
+const MCP_TOKEN = env.SEYL_MCP_TOKEN ?? "";
+
 // The folder the agent is allowed to work in. OpenCode treats it as its "project".
 // This path is sent to the harness, so it must exist where the *harness* runs.
 export const WORKSPACE = env.SEYL_WORKSPACE ?? path.resolve("workspace");
@@ -86,6 +90,7 @@ export const config: Config = {
         read: true,
         glob: true,
         grep: true,
+        "docs_*": true, // document tools from our MCP server (search, list, read)
         bash: false,
         edit: false,
         write: false,
@@ -98,6 +103,16 @@ export const config: Config = {
         question: false, // would pause for an answer the UI can't give yet
       },
       steps: 12, // at most 12 model calls per message: stops runaway agent loops
+    },
+  },
+  // MCP servers: tools that live outside OpenCode. "docs" = seyl-ai's document library.
+  mcp: {
+    docs: {
+      type: "remote",
+      url: `${SEYL_API_URL}/mcp`,
+      headers: { Authorization: `Bearer ${MCP_TOKEN}` },
+      oauth: false,
+      timeout: 30_000,
     },
   },
   // v1 is read-only: the agent may read and search files, but not change

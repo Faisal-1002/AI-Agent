@@ -13,21 +13,28 @@
     "typecheck": "tsc",
     "build": "vite build",
     "gateway:keys": "tsx scripts/gateway-keys.ts",
-    "guard:eval": "tsx scripts/guard-eval.ts"
+    "guard:eval": "tsx scripts/guard-eval.ts",
+    "db:setup": "tsx scripts/db-setup.ts",
+    "ask": "tsx scripts/ask.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@opencode-ai/sdk": "^1.18.33",
     "clsx": "^2.1.1",
     "hono": "^4.13.11",
     "lucide-react": "^1.48.0",
+    "mammoth": "^1.13.0",
+    "postgres": "^3.4.9",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-markdown": "^10.1.0",
     "react-textarea-autosize": "^8.5.9",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "unpdf": "^1.8.1",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.20",

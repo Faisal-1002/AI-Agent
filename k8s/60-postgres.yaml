@@ -1,4 +1,5 @@
-# Postgres for the LiteLLM gateway (virtual keys, spend and request logs).
+# Postgres with pgvector: the gateway's keys and logs (database "litellm"), and seyl-ai's
+# documents and their vectors (database "seyl", own user — created by npm run db:setup).
 # One replica with a persistent volume — a real deployment would use a managed
 # database instead (on AWS: Amazon RDS / Aurora).
 apiVersion: v1
@@ -29,7 +30,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16
+          image: pgvector/pgvector:0.8.6-pg16-trixie # Postgres 16 + pgvector 0.8.6, on the SAME Debian (trixie) that created the data — see README
           env:
             - name: POSTGRES_DB
               value: litellm

@@ -1,8 +1,12 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import type { ChatEvent, GuardFlags, ModelInfo } from "../shared/chat.js";
+import { migrate } from "./db.js";
+import { addDocument, deleteDocument, fileType, listDocuments, MAX_UPLOAD_BYTES, SUPPORTED } from "./documents.js";
 import { reviewReply, screenPrompt } from "./guard.js";
+import { mcp } from "./mcp.js";
 import { AGENT, client, MODEL, MODEL_INFO } from "./opencode.js";
 import { guardFlags, sessionOf, toChatEvent, toChatMessage, toConversation } from "./translate.js";
 import { voice } from "./voice.js";
@@ -39,6 +43,21 @@ app.get("/api/model", (c) => c.json<ModelInfo>(MODEL_INFO));
 
 // Speech-to-text and text-to-speech (server/voice.ts).
 app.route("/api/voice", voice);
+
+// Document library for "chat with your documents" (server/documents.ts).
+app.get("/api/documents", async (c) => c.json(await listDocuments()));
+app.post("/api/documents", bodyLimit({ maxSize: MAX_UPLOAD_BYTES, onError: (c) => c.json({ error: "File too large (max 20 MB)" }, 413) }), async (c) => {
+  const { file } = await c.req.parseBody();
+  if (!(file instanceof File)) return c.json({ error: "Missing file" }, 400);
+  if (!SUPPORTED.includes(fileType(file.name))) {
+    return c.json({ error: `Unsupported file type. Supported: ${SUPPORTED.join(", ")}` }, 415);
+  }
+  return c.json(await addDocument(file), 201); // indexing continues in the background
+});
+app.delete("/api/documents/:id", async (c) => (await deleteDocument(c.req.param("id")) ? c.body(null, 204) : c.json({ error: "Not found" }, 404)));
+
+// MCP tool server for the agent (server/mcp.ts). Deliberately outside /api: not proxied to browsers.
+app.route("/mcp", mcp);
 
 // Conversations = OpenCode sessions.
 app.get("/api/conversations", async (c) => {
@@ -96,12 +115,18 @@ app.post("/api/conversations/:id/prompt", async (c) => {
   return c.body(null, 204);
 });
 
-// After the agent finishes, run the safety filter on its reply and store any flag in
-// the session's metadata (the UI shows it; it survives reloads).
+// A hidden follow-up for when the model ends its turn with the answer only in its
+// thoughts (a known failure of thinking models after tool calls). Marked synthetic,
+// so the UI doesn't show it.
+const NUDGE = "(Write your final answer to my last question now, based on what you found. Don't call more tools.)";
+
+// After the agent finishes: make sure there's a visible answer, then run the safety
+// filter on it and store any flag in the session's metadata (shown in the UI, survives reloads).
 // Note: this runs in the api pod that received the prompt; if that pod stops first,
-// the check is skipped. A production system would hand this to a queue/worker.
+// it's skipped. A production system would hand this to a queue/worker.
 async function reviewWhenDone(sessionID: string, prompt: string) {
   try {
+    let nudged = false;
     const deadline = Date.now() + 15 * 60_000;
     while (Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -109,16 +134,29 @@ async function reviewWhenDone(sessionID: string, prompt: string) {
       if (status[sessionID] && status[sessionID].type !== "idle") continue;
 
       const messages = unwrap(await client.session.messages({ sessionID }));
-      const lastUser = messages.findLastIndex((m) => m.info.role === "user");
-      const reply = messages.slice(lastUser + 1);
-      const last = reply.at(-1)?.info;
+      // The reply = everything after the user's last REAL message (not our hidden nudge).
+      const lastUser = messages.findLastIndex(
+        (m) => m.info.role === "user" && m.parts.some((p) => p.type === "text" && !p.synthetic),
+      );
+      const reply = messages.slice(lastUser + 1).filter((m) => m.info.role === "assistant");
+      const last = messages.at(-1)?.info;
       const done = last?.role === "assistant" && last.time.completed !== undefined;
-      if (!done) continue; // not started yet, or still running
+      if (!done || reply.length === 0) continue; // not started yet, or still running
 
       const text = reply
         .flatMap((m) => m.parts)
         .flatMap((p) => (p.type === "text" && !p.synthetic ? [p.text] : []))
         .join("\n\n");
+
+      // Safety net: no visible answer (and the user didn't press Stop) → ask once for it.
+      const aborted = last.role === "assistant" && last.error?.name === "MessageAbortedError";
+      if (text.trim().length < 20 && !nudged && !aborted) {
+        nudged = true;
+        console.log(`[agent] ${sessionID}: turn ended without a visible answer — nudging once`);
+        check(await client.session.promptAsync({ sessionID, agent: AGENT, model: MODEL, parts: [{ type: "text", text: NUDGE, synthetic: true }] }));
+        continue;
+      }
+
       const verdict = await reviewReply(prompt, text);
       if (!verdict) return;
 
@@ -162,6 +200,21 @@ app.get("/api/conversations/:id/events", (c) => {
     }
   });
 });
+
+// Create seyl-ai's tables if needed (keeps retrying: the database may start after us).
+async function migrateWithRetry() {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await migrate();
+      console.log("database ready");
+      return;
+    } catch (err) {
+      console.error(`database not ready (attempt ${attempt}): ${(err as Error).message}`);
+      await new Promise((resolve) => setTimeout(resolve, Math.min(30_000, 2_000 * attempt)));
+    }
+  }
+}
+void migrateWithRetry();
 
 const server = serve({ fetch: app.fetch, port: PORT }, () => {
   console.log(`seyl-ai backend running at http://localhost:${PORT}`);

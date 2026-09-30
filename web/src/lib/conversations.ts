@@ -39,6 +39,9 @@ export type Turn = { id: string; role: Role; messages: ChatMessage[] };
 export function groupTurns(messages: ChatMessage[]): Turn[] {
   const turns: Turn[] = [];
   for (const message of messages) {
+    // Hidden messages (e.g. the backend's synthetic "write your answer" nudge) have no
+    // visible parts; skipping them also lets the assistant turn around them stay one turn.
+    if (message.role === "user" && message.parts.length === 0) continue;
     const last = turns.at(-1);
     if (last?.role === message.role && message.role === "assistant") last.messages.push(message);
     else turns.push({ id: message.id, role: message.role, messages: [message] });

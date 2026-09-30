@@ -1,4 +1,4 @@
-import { PanelLeftClose, SquarePen } from "lucide-react";
+import { FileText, PanelLeftClose, SquarePen } from "lucide-react";
 import { useMemo } from "react";
 import type { Conversation } from "../../../../shared/chat";
 import { cn } from "../../lib/cn";
@@ -16,9 +16,10 @@ type Props = {
   onNewChat: () => void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onOpenDocuments: () => void;
 };
 
-export function Sidebar({ open, overlay, conversations, activeId, onClose, onNewChat, onSelect, onDelete }: Props) {
+export function Sidebar({ open, overlay, conversations, activeId, onClose, onNewChat, onSelect, onDelete, onOpenDocuments }: Props) {
   const groups = useMemo(() => groupByDate(conversations), [conversations]);
 
   return (
@@ -61,6 +62,16 @@ export function Sidebar({ open, overlay, conversations, activeId, onClose, onNew
           ))}
         </nav>
 
+        <div className="min-w-[260px] border-t border-border-light p-2">
+          <button
+            type="button"
+            onClick={onOpenDocuments}
+            className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-sm hover:bg-surface-active-alt"
+          >
+            <FileText className="size-4 text-text-secondary" />
+            Documents
+          </button>
+        </div>
         <div className="flex min-w-[260px] items-center gap-2 border-t border-border-light px-4 py-3 text-sm font-medium">
           <Avatar role="assistant" />
           seyl-ai
