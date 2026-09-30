@@ -1,6 +1,6 @@
-import { FileText, PanelLeftClose, SquarePen } from "lucide-react";
+import { FileText, LogOut, PanelLeftClose, SquarePen } from "lucide-react";
 import { useMemo } from "react";
-import type { Conversation } from "../../../../shared/chat";
+import type { Conversation, User } from "../../../../shared/chat";
 import { cn } from "../../lib/cn";
 import { groupByDate } from "../../lib/conversations";
 import { Avatar } from "../ui/Avatar";
@@ -17,9 +17,11 @@ type Props = {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onOpenDocuments: () => void;
+  user: User;
+  onSignOut: () => void;
 };
 
-export function Sidebar({ open, overlay, conversations, activeId, onClose, onNewChat, onSelect, onDelete, onOpenDocuments }: Props) {
+export function Sidebar({ open, overlay, conversations, activeId, onClose, onNewChat, onSelect, onDelete, onOpenDocuments, user, onSignOut }: Props) {
   const groups = useMemo(() => groupByDate(conversations), [conversations]);
 
   return (
@@ -72,9 +74,19 @@ export function Sidebar({ open, overlay, conversations, activeId, onClose, onNew
             Documents
           </button>
         </div>
-        <div className="flex min-w-[260px] items-center gap-2 border-t border-border-light px-4 py-3 text-sm font-medium">
-          <Avatar role="assistant" />
-          seyl-ai
+        <div className="flex min-w-[260px] items-center gap-2 border-t border-border-light px-3 py-2.5 text-sm">
+          {user.local ? (
+            <Avatar role="assistant" />
+          ) : (
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-tertiary font-semibold" aria-hidden>
+              {user.name.slice(0, 1).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-medium">{user.local ? "seyl-ai" : user.name}</div>
+            {user.email && <div className="truncate text-xs text-text-tertiary">{user.email}</div>}
+          </div>
+          {!user.local && <IconButton icon={LogOut} label="Sign out" size="sm" onClick={onSignOut} />}
         </div>
       </aside>
     </>

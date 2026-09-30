@@ -29,6 +29,11 @@ services:
       SEYL_DB_HOST: db
       SEYL_DB_PASSWORD: ${SEYL_DB_PASSWORD}
       SEYL_MCP_TOKEN: ${SEYL_MCP_TOKEN}
+      AUTH_ENABLED: "true"
+      SEYL_PUBLIC_URL: http://localhost:8080
+      OIDC_INTERNAL_ISSUER: http://keycloak:8080/auth/realms/seyl
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      SEYL_SESSION_SECRET: ${SEYL_SESSION_SECRET}
     depends_on: [harness]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
@@ -40,7 +45,7 @@ services:
     build: { context: ., dockerfile: deploy/web.Dockerfile }
     image: seyl-ai/web:dev
     ports: ["8080:80"]
-    depends_on: [api]
+    depends_on: [api, keycloak] # nginx proxies /api and /auth to them
 
   # ── Model side ────────────────────────────────────────────────────────────
 
@@ -58,6 +63,25 @@ services:
       TTS_API_BASE: http://tts:8000/v1
     extra_hosts: ["host.docker.internal:host-gateway"]
     ports: ["127.0.0.1:4000:4000"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  # Keycloak: login page, users, OIDC tokens. Reached by browsers via nginx at /auth.
+  # start-dev = plain HTTP and relaxed checks: fine on localhost, not for production.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.5
+    command: ["start-dev"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_HOSTNAME: http://localhost:8080/auth # the public address tokens are issued for
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true" # the api may call it as keycloak:8080
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_PROXY_HEADERS: xforwarded
     depends_on:
       db: { condition: service_healthy }
 

@@ -5,7 +5,7 @@ My own AI agent — a local web app built on the [OpenCode](https://github.com/a
 ## How it works
 
 ```
-Browser (React)               localhost:5173   web/          chat UI
+Browser (React)               localhost:5173   web/          chat UI (sign in first — see Login)
    │  HTTP + Server-Sent Events
    ▼
 seyl-ai backend (Hono)        localhost:3000   server/       my code: sessions, prompts, safety filter, events
@@ -84,6 +84,7 @@ npm run dev
 ```
 
 Then open http://localhost:5173 and ask something like *"Read notes.md and tell me the project codename."*
+With `npm run dev`, login is off (`AUTH_ENABLED` unset): you're the single local user. The containers turn it on.
 `npm run gateway:keys` registers the per-consumer keys from `.env` in the gateway (safe to re-run).
 
 ## Gateway
@@ -202,6 +203,45 @@ Lessons learned:
 - **Small models wander**: the agent sometimes looks for uploaded documents with `glob`/`read` first, wasting
   steps. Clearer tool descriptions help; it's a target for the optimization phase.
 - **Measure, don't guess**: every change above was checked with repeated runs, not one lucky answer.
+
+## Login
+
+Sign in with **OpenID Connect**. The identity provider is **Keycloak** (open source) running next to the app; the
+same code works with any OIDC provider (on AWS: Amazon Cognito).
+
+```
+Sign in ──► /api/auth/login: PKCE verifier + state + nonce (encrypted, 10-min cookie) ──► Keycloak login page (/auth)
+       ◄── /api/auth/callback?code ── api exchanges the code server-to-server (client secret + PKCE verifier),
+           openid-client verifies the ID token (signature, issuer, audience, nonce, expiry)
+       ◄── HttpOnly cookie "seyl_session" (random id; only its SHA-256 is stored in Postgres)
+```
+
+- **Backend for frontend (BFF)**: the api does the whole OAuth 2.1 flow (Authorization Code + PKCE). Tokens never
+  reach the browser — `document.cookie` is empty, so a malicious script has nothing to steal.
+- **Keycloak client**: confidential, code flow + PKCE S256 only; implicit flow and password grant off (both removed
+  in OAuth 2.1). Self-registration off; brute-force protection on.
+- **Per-user conversations**: each conversation belongs to its creator; someone else's id → `404` (not 403, which
+  would confirm it exists). Conversations from before login existed went to the first user who signed in.
+- **Sign out** ends the session in the api *and* at Keycloak (otherwise "Sign in" would log straight back in).
+- **Test it**: `npm run auth:test` creates two temporary users and checks 12 things — PKCE, wrong password,
+  isolation (list and by id), logout, cookie replay — then deletes them.
+- Setup: `npm run auth:setup` creates the realm `seyl`, the client `seyl-web` and a local account `faisal`
+  (password: `SEYL_USER_PASSWORD` in `.env`). Keycloak admin console: http://localhost:8080/auth/admin
+  (user `admin`, password `KEYCLOAK_ADMIN_PASSWORD`).
+
+Lessons learned:
+
+- **One issuer, two addresses.** Browsers reach Keycloak at `localhost:8080/auth` (through nginx); the api, inside
+  the cluster, at `keycloak:8080`. Tokens must name ONE issuer. Keycloak: `KC_HOSTNAME` (public) +
+  `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` (server-to-server endpoints use the internal address). api: openid-client's
+  `customFetch` sends back-channel calls to the internal address. Verified from both sides: same issuer.
+- **Keycloak 24+ requires a last name** by default (declarative user profile) → an extra "verify profile" form on
+  first login. `auth:setup` makes names optional — and keeps real names out of a public repo.
+- **No open redirects**: `returnTo` must be a local path (`/…`, not `//evil.com`).
+- **Local shortcuts, not for production**: Keycloak `start-dev`, plain HTTP, short test passwords.
+- **Still shared between users**: the document library and the workspace files. Making them per-user means passing
+  *who is asking* through the agent into its tools (MCP) — and a separate workspace per user. That's part of the
+  multi-user/AWS phase.
 
 ## Approvals
 
@@ -322,6 +362,7 @@ Run the stack in Compose **or** Kubernetes, not both at once.
 docker compose up --build -d
 npm run gateway:keys
 npm run db:setup
+npm run auth:setup
 ```
 
 Open http://localhost:8080. Stop with `docker compose down` (chats are kept in the `opencode-data` volume).
@@ -344,6 +385,7 @@ kubectl -n seyl-ai port-forward svc/litellm 4001:4000
 GATEWAY_URL=http://127.0.0.1:4001 npm run gateway:keys
 kubectl -n seyl-ai port-forward svc/db 5433:5432
 DB_PORT=5433 npm run db:setup
+npm run auth:setup   # Keycloak is reachable through nginx at localhost:8080/auth
 ```
 
 Open http://localhost:8080. Things to try:
@@ -365,6 +407,7 @@ After changing code: `docker compose build` then `kubectl -n seyl-ai rollout res
 | `k8s/30-web.yaml` | web Deployment (2 replicas), `preStop` pause, LoadBalancer Service on port 8080 |
 | `k8s/40-asr.yaml`, `k8s/50-tts.yaml` | voice Deployments (1 replica each) with a 5 GiB volume for the model, a `startupProbe` that allows 10 min for the first download, memory limits sized from peak usage |
 | `k8s/60-postgres.yaml` | Postgres 16 + pgvector (`0.8.6-pg16-trixie`, 1 replica, 2 GiB volume): the gateway's database and seyl-ai's documents; on AWS a managed database (RDS) |
+| `k8s/80-keycloak.yaml` | Keycloak 26.7.5 (`start-dev`, its own database), public URL via nginx at `/auth`, back channel `keycloak:8080` |
 | `k8s/70-litellm.yaml` | the gateway: secrets from the Secret, `DATABASE_URL` composed with `$(POSTGRES_PASSWORD)`, readiness = gateway + database up, not exposed outside the cluster |
 | `kustomization.yaml` | lists the manifests; generates the `seyl-secrets` Secret from `.env` (hash-suffixed name, references rewritten) |
 
@@ -391,6 +434,10 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `TORCH_THREADS` | `8` (asr) / `4` (tts) | voice services: CPU threads |
 | `GUARD_MODE` | `enforce` | api: `enforce` / `monitor` / `off` ([Safety](#safety)) |
 | `GUARD_STRICT` | `false` | api: also block *Controversial* messages |
+| `AUTH_ENABLED` | unset (off) | api: `true` = require sign-in (containers) |
+| `SEYL_PUBLIC_URL` | `http://localhost:8080` | api: where browsers reach the app (redirect URIs, cookies) |
+| `OIDC_ISSUER` / `OIDC_INTERNAL_ISSUER` | `<public>/auth/realms/seyl` / unset | api: the issuer, and how to reach it from inside the cluster |
+| `OIDC_CLIENT_SECRET`, `SEYL_SESSION_SECRET` | from `.env` | api: client secret at Keycloak; key for the login cookie |
 | `SEYL_DB_HOST` / `SEYL_DB_PORT` / `SEYL_DB_PASSWORD` | `127.0.0.1` / `5432` / from `.env` | api: seyl-ai's own database |
 | `SEYL_API_URL` | `http://127.0.0.1:3000` | harness → the api's MCP tool server |
 | `SEYL_MCP_TOKEN` | from `.env` | harness ↔ api: bearer token for `/mcp` |
@@ -416,6 +463,10 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `server/documents.ts`, `server/chunk.ts`, `server/db.ts` | Document library: extraction, chunking, embeddings, pgvector search; database connection + tables |
 | `server/mcp.ts` | MCP tool server for the agent (search / list / read documents) |
 | `scripts/db-setup.ts` | Creates seyl-ai's database, user and the pgvector extension (`npm run db:setup`) |
+| `server/auth.ts`, `server/owners.ts` | Login (OIDC, BFF, sessions) and conversation ownership |
+| `scripts/auth-setup.ts`, `scripts/auth-test.ts` | Configure Keycloak (`npm run auth:setup`); login security test (`npm run auth:test`) |
+| `scripts/lib/session.ts` | Cookie jar + scripted OIDC sign-in, used by the scripts |
+| `web/src/components/auth/LoginScreen.tsx`, `web/src/hooks/useAuth.ts` | Sign-in screen; who's signed in |
 | `scripts/ask.ts` | Ask through the real API, report tools and answer (`npm run ask -- [--runs N] "…"`) |
 | `web/src/App.tsx` | Page layout: sidebar + chat |
 | `web/src/hooks/` | `useChat` (history, live events, send, stop), `useConversations`, … |
@@ -435,13 +486,15 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 
 | Method & path | Does |
 |---|---|
+| `GET /api/auth/login` → `/api/auth/callback` | Sign in (OIDC redirect flow) |
+| `GET /api/auth/me`, `POST /api/auth/logout` | Who's signed in; sign out (returns Keycloak's logout URL) |
 | `GET /api/model` | Which model is configured |
 | `GET /api/conversations` | List conversations |
 | `POST /api/conversations` | Create one |
 | `DELETE /api/conversations/:id` | Delete one |
 | `GET /api/conversations/:id/messages` | History + whether the agent is still working |
 | `POST /api/conversations/:id/prompt` | Send a message: `{ text, images? }` (reply arrives on the event stream) |
-| `POST /api/conversations/:id/permissions/:requestID` | Answer an approval request: `{ reply: "once" | "always" | "reject" }` |
+| `POST /api/conversations/:id/permissions/:requestID` | Answer an approval request: `{ reply: "once" \| "always" \| "reject" }` |
 | `POST /api/conversations/:id/abort` | Stop the agent |
 | `GET /api/conversations/:id/events` | Live updates (Server-Sent Events) |
 | `GET /api/voice/status` | Which voice services are up (`{ asr, tts }`) |

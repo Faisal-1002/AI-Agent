@@ -1,8 +1,10 @@
-import type { ChatMessage, Conversation, DocumentInfo, GuardFlags, ImageAttachment, ModelInfo, PermissionAsk, PermissionReply, VoiceStatus } from "../../../shared/chat";
+import type { ChatMessage, Conversation, DocumentInfo, GuardFlags, ImageAttachment, ModelInfo, PermissionAsk, PermissionReply, User, VoiceStatus } from "../../../shared/chat";
 
 // Typed wrappers around the seyl-ai backend (server/index.ts).
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, init);
+  // Session expired (or signed out in another tab): reload, and the login screen appears.
+  if (res.status === 401 && path !== "/auth/me") window.location.reload();
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `${res.status} ${res.statusText}`);
@@ -11,6 +13,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  me: () => request<{ user: User }>("/auth/me"),
+  logout: () => request<{ logoutUrl: string }>("/auth/logout", { method: "POST" }),
+
   model: () => request<ModelInfo>("/model"),
   conversations: () => request<Conversation[]>("/conversations"),
   createConversation: () => request<Conversation>("/conversations", { method: "POST" }),

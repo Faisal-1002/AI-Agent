@@ -43,5 +43,28 @@ export async function migrate() {
       )`);
     // HNSW: an approximate nearest-neighbour index, so search stays fast as chunks grow.
     await tx`CREATE INDEX IF NOT EXISTS chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops)`;
+
+    // Login sessions (server/auth.ts). Only a HASH of the cookie's session id is stored:
+    // someone who reads this table still can't use it to sign in.
+    await tx`
+      CREATE TABLE IF NOT EXISTS auth_sessions (
+        id_hash    text PRIMARY KEY,
+        sub        text NOT NULL,
+        name       text NOT NULL,
+        email      text,
+        username   text,
+        id_token   text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        expires_at timestamptz NOT NULL
+      )`;
+
+    // Which user created which conversation (server/owners.ts).
+    await tx`
+      CREATE TABLE IF NOT EXISTS conversation_owners (
+        conversation_id text PRIMARY KEY,
+        owner           text NOT NULL,
+        created_at      timestamptz NOT NULL DEFAULT now()
+      )`;
+    await tx`CREATE INDEX IF NOT EXISTS conversation_owners_owner_idx ON conversation_owners (owner)`;
   });
 }

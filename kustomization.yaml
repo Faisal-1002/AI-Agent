@@ -15,6 +15,7 @@ resources:
   - k8s/50-tts.yaml
   - k8s/60-postgres.yaml
   - k8s/70-litellm.yaml
+  - k8s/80-keycloak.yaml
 
 secretGenerator:
   - name: seyl-secrets

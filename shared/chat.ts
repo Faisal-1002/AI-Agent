@@ -32,6 +32,9 @@ export type Conversation = { id: string; title: string; updatedAt: number };
 
 export type ModelInfo = { provider: string; name: string; vision: boolean };
 
+// The signed-in person (from the OIDC ID token). `local`: login is off (npm run dev).
+export type User = { sub: string; name: string; email?: string; username?: string; local?: boolean };
+
 // An image attached to a message (already resized in the browser).
 export type ImageAttachment = { name: string; mime: string; dataUrl: string };
 

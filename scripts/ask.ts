@@ -6,11 +6,17 @@
 //   npm run ask -- --keep "…"                                     # keep the test conversations
 //
 // Each run uses a fresh conversation, deleted afterwards unless --keep is given.
+// When login is on, it signs in as SEYL_ASK_USER (default "faisal", password SEYL_USER_PASSWORD).
 //
 // Reports per run: tools used, seconds, and whether a visible answer came out (a thinking
 // model can end a turn with its answer only in its "thoughts" — this makes that measurable).
 
 import type { ChatMessage } from "../shared/chat.js";
+import { Session } from "./lib/session.js";
+
+try {
+  process.loadEnvFile();
+} catch {}
 
 const BASE = process.env.SEYL_URL ?? "http://localhost:8080";
 const args = process.argv.slice(2);
@@ -21,8 +27,13 @@ const keep = keepFlag >= 0 && args.splice(keepFlag, 1).length > 0;
 const question = args.join(" ").trim();
 if (!question) throw new Error('Usage: npm run ask -- [--runs N] "question"');
 
+const session = new Session(BASE);
+if ((await session.api("/auth/me")).status === 401) {
+  await session.signIn(process.env.SEYL_ASK_USER ?? "faisal", process.env.SEYL_USER_PASSWORD ?? "");
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}/api${path}`, init);
+  const res = await session.api(path, init);
   const body = res.status === 204 ? undefined : await res.json();
   if (!res.ok) throw new Error(`${res.status}: ${body?.error ?? res.statusText}`);
   return body as T;

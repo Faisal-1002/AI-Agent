@@ -33,6 +33,19 @@ spec:
             - name: SEYL_MCP_TOKEN # the harness must present this to use /mcp
               valueFrom:
                 secretKeyRef: { name: seyl-secrets, key: SEYL_MCP_TOKEN }
+            # Login (OIDC with Keycloak, server/auth.ts)
+            - name: AUTH_ENABLED
+              value: "true"
+            - name: SEYL_PUBLIC_URL # where browsers reach the app
+              value: http://localhost:8080
+            - name: OIDC_INTERNAL_ISSUER # how the api reaches Keycloak inside the cluster
+              value: http://keycloak:8080/auth/realms/seyl
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: { name: seyl-secrets, key: OIDC_CLIENT_SECRET }
+            - name: SEYL_SESSION_SECRET
+              valueFrom:
+                secretKeyRef: { name: seyl-secrets, key: SEYL_SESSION_SECRET }
           ports:
             - containerPort: 3000
           # Zero-downtime rollouts: when a pod is told to stop, the load balancer

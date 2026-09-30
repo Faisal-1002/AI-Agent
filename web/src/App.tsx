@@ -1,17 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
+import type { User } from "../../shared/chat";
+import { LoginScreen } from "./components/auth/LoginScreen";
 import { ChatHeader } from "./components/chat/ChatHeader";
 import { Landing } from "./components/chat/Landing";
 import { MessageList } from "./components/chat/MessageList";
 import { ChatForm } from "./components/input/ChatForm";
 import { DocumentsPanel } from "./components/documents/DocumentsPanel";
 import { Sidebar } from "./components/nav/Sidebar";
+import { useAuth } from "./hooks/useAuth";
 import { useChat } from "./hooks/useChat";
 import { useConversations } from "./hooks/useConversations";
 import { useMediaQuery } from "./hooks/useMediaQuery";
 import { useModel } from "./hooks/useModel";
 import { useVoiceStatus } from "./hooks/useVoiceStatus";
 
+// Sign-in gate: nothing loads until the api says who you are.
 export function App() {
+  const { auth, signIn, signOut } = useAuth();
+  if (auth.status === "loading") return <div className="h-dvh bg-presentation" />;
+  if (auth.status === "signed-out") return <LoginScreen onSignIn={signIn} error={auth.error} />;
+  return <ChatApp user={auth.user} onSignOut={signOut} />;
+}
+
+function ChatApp({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const wide = useMediaQuery("(min-width: 768px)");
   const [sidebarOpen, setSidebarOpen] = useState(wide);
   const [documentsOpen, setDocumentsOpen] = useState(false);
@@ -61,6 +72,8 @@ export function App() {
         onSelect={select}
         onDelete={deleteConversation}
         onOpenDocuments={() => setDocumentsOpen(true)}
+        user={user}
+        onSignOut={onSignOut}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">

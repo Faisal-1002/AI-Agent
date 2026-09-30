@@ -1,18 +1,21 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { createMiddleware } from "hono/factory";
 import { streamSSE } from "hono/streaming";
-import type { ChatEvent, GuardFlags, ImageAttachment, ModelInfo, PermissionReply } from "../shared/chat.js";
+import type { ChatEvent, GuardFlags, ImageAttachment, ModelInfo, PermissionReply, User } from "../shared/chat.js";
+import { AUTH_ENABLED, authRoutes, requireUser } from "./auth.js";
 import { migrate } from "./db.js";
 import { addDocument, deleteDocument, fileType, listDocuments, MAX_UPLOAD_BYTES, SUPPORTED } from "./documents.js";
 import { reviewReply, screenPrompt } from "./guard.js";
 import { mcp } from "./mcp.js";
+import { claimUnowned, ownedBy, ownerOf, recordOwner } from "./owners.js";
 import { AGENT, client, MODEL, MODEL_INFO } from "./opencode.js";
 import { guardFlags, sessionOf, toChatEvent, toChatMessage, toConversation, toPermissionAsk } from "./translate.js";
 import { voice } from "./voice.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
-const app = new Hono();
+const app = new Hono<{ Variables: { user: User } }>();
 
 // OpenCode SDK calls return { data, error } instead of throwing; these turn
 // errors into exceptions, which onError sends back as HTTP 502.
@@ -34,6 +37,19 @@ function unwrap<T>(result: { data?: T; error?: unknown }): T {
 //   and diagnostics. Not used as a Kubernetes readiness probe: a harness restart
 //   would then mark every api pod unready at once (a cascading outage).
 app.get("/api/healthz", (c) => c.json({ ok: true }));
+
+// Sign-in (server/auth.ts). Everything else under /api needs a signed-in user.
+app.use("/api/*", requireUser);
+app.route(
+  "/api/auth",
+  authRoutes(async (user) => {
+    // Conversations from before login existed: the first person to sign in gets them.
+    const sessions = unwrap(await client.session.list({ roots: true, limit: 1000 }));
+    const unowned = [];
+    for (const s of sessions) if (!(await ownerOf(s.id))) unowned.push(s.id);
+    if (unowned.length) await claimUnowned(unowned, user.sub);
+  }),
+);
 app.get("/api/readyz", async (c) => {
   const { error } = await client.session.status({}).catch((err: Error) => ({ error: err.message }));
   return error === undefined ? c.json({ ok: true }) : c.json({ ok: false, error }, 503);
@@ -59,15 +75,31 @@ app.delete("/api/documents/:id", async (c) => (await deleteDocument(c.req.param(
 // MCP tool server for the agent (server/mcp.ts). Deliberately outside /api: not proxied to browsers.
 app.route("/mcp", mcp);
 
-// Conversations = OpenCode sessions.
+// Conversations = OpenCode sessions, each owned by the user who created it.
+// Every route with a conversation id checks ownership: someone else's is "not found".
+const ownConversation = createMiddleware<{ Variables: { user: User } }>(async (c, next) => {
+  if (AUTH_ENABLED && (await ownerOf(c.req.param("id") ?? "")) !== c.get("user").sub) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  return next();
+});
+app.use("/api/conversations/:id", ownConversation);
+app.use("/api/conversations/:id/*", ownConversation);
+
 app.get("/api/conversations", async (c) => {
   const sessions = unwrap(await client.session.list({ roots: true, limit: 100 }));
-  const conversations = sessions.map(toConversation).sort((a, b) => b.updatedAt - a.updatedAt);
+  const mine = AUTH_ENABLED ? await ownedBy(c.get("user").sub) : undefined;
+  const conversations = sessions
+    .filter((s) => !mine || mine.has(s.id))
+    .map(toConversation)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
   return c.json(conversations);
 });
 
 app.post("/api/conversations", async (c) => {
-  return c.json(toConversation(unwrap(await client.session.create({}))));
+  const session = unwrap(await client.session.create({}));
+  await recordOwner(session.id, c.get("user").sub);
+  return c.json(toConversation(session));
 });
 
 app.delete("/api/conversations/:id", async (c) => {
