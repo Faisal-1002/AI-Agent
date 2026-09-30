@@ -1,6 +1,6 @@
 import mammoth from "mammoth";
 import { extractText as extractPdfText, getDocumentProxy } from "unpdf";
-import type { DocumentInfo } from "../shared/chat.js";
+import { DOCUMENT_TYPES, type AttachedDocument, type DocumentInfo } from "../shared/chat.js";
 import { chunkText } from "./chunk.js";
 import { sql } from "./db.js";
 import { LLM_GATEWAY_URL } from "./opencode.js";
@@ -11,7 +11,7 @@ import { LLM_GATEWAY_URL } from "./opencode.js";
 const API_KEY = process.env.LITELLM_KEY_API;
 const EMBEDDING_MODEL = "qwen3-embedding";
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
-export const SUPPORTED = ["pdf", "docx", "md", "txt", "csv", "json", "html"];
+export const SUPPORTED = DOCUMENT_TYPES;
 
 // Qwen3-Embedding is asymmetric: questions get an instruction, documents don't.
 const QUERY_INSTRUCTION = "Instruct: Given a question, retrieve passages from the user's documents that answer it\nQuery: ";
@@ -76,16 +76,30 @@ export async function listDocuments(): Promise<DocumentInfo[]> {
   return rows.map(toInfo);
 }
 
+// The attached documents that are ready to read (unknown or still-indexing ids are left out).
+export async function readyDocuments(ids: string[]): Promise<AttachedDocument[]> {
+  const valid = ids.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+  if (valid.length === 0) return [];
+  return sql<AttachedDocument[]>`SELECT id, name FROM documents WHERE id = ANY(${valid}::uuid[]) AND status = 'ready'`;
+}
+
 export async function deleteDocument(id: string): Promise<boolean> {
   const rows = await sql`DELETE FROM documents WHERE id = ${id} RETURNING id`; // chunks go too (ON DELETE CASCADE)
   return rows.length > 0;
+}
+
+// A file name as it's shown to people and to the model: no control characters (newlines
+// could fake extra lines in a prompt), whitespace collapsed, at most 200 characters.
+export function cleanName(name: string): string {
+  const clean = name.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+  return clean || "document";
 }
 
 // Store the upload and start indexing in the background; returns right away.
 export async function addDocument(file: File): Promise<DocumentInfo> {
   const type = fileType(file.name);
   const [row] = await sql<Row[]>`
-    INSERT INTO documents (name, type, size) VALUES (${file.name}, ${type}, ${file.size})
+    INSERT INTO documents (name, type, size) VALUES (${cleanName(file.name)}, ${type}, ${file.size})
     RETURNING id, name, type, size, status, error, chunk_count, created_at`;
   void indexDocument(row.id, type, new Uint8Array(await file.arrayBuffer()));
   return toInfo(row);

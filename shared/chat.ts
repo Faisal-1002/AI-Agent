@@ -1,12 +1,16 @@
 // Types shared by the backend (server/) and the web UI (web/).
 // The backend translates OpenCode's data into these; the UI only knows these.
 
+// Every state-changing API request must send this header with the value "1" (server/csrf.ts).
+export const CSRF_HEADER = "X-Seyl-Csrf";
+
 export type ToolStatus = "pending" | "running" | "completed" | "error";
 
 export type ChatPart =
   | { id: string; kind: "text"; text: string }
   | { id: string; kind: "reasoning"; text: string; done: boolean }
   | { id: string; kind: "image"; mime: string; url: string; name?: string } // url: a data: URL
+  | { id: string; kind: "documents"; documents: AttachedDocument[] } // library documents attached to a message
   | {
       id: string;
       kind: "tool";
@@ -38,8 +42,14 @@ export type User = { sub: string; name: string; email?: string; username?: strin
 // An image attached to a message (already resized in the browser).
 export type ImageAttachment = { name: string; mime: string; dataUrl: string };
 
+// A document from the library, attached to a message (the agent reads it with its docs tools).
+export type AttachedDocument = { id: string; name: string };
+
+// File types the document library can index (server/documents.ts extracts their text).
+export const DOCUMENT_TYPES = ["pdf", "docx", "md", "txt", "csv", "json", "html"];
+
 // POST /api/conversations/:id/prompt. think: true = reason first (slower; default off).
-export type PromptRequest = { text?: string; images?: ImageAttachment[]; think?: boolean };
+export type PromptRequest = { text?: string; images?: ImageAttachment[]; documents?: AttachedDocument[]; think?: boolean };
 
 // An uploaded document in the searchable library (server/documents.ts).
 export type DocumentInfo = {

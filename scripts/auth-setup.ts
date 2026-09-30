@@ -1,21 +1,23 @@
 // Configures Keycloak for seyl-ai through its admin API (safe to run again).
 //
-//   npm run auth:setup                                  # Keycloak via http://localhost:8080/auth (nginx)
-//   KEYCLOAK_URL=http://127.0.0.1:8081/auth npm run auth:setup   # e.g. through a port-forward
+//   npm run auth:setup      # reaches Keycloak's admin API directly (scripts/lib/keycloak-admin.ts)
 //
 // Creates / updates:
 //   - realm "seyl"            — seyl-ai's own space for users (separate from Keycloak's "master")
 //   - client "seyl-web"       — the api, as a CONFIDENTIAL client (it has a secret: OIDC_CLIENT_SECRET)
 //                               using the Authorization Code flow with PKCE (S256) only
+//   - an OAuth 2.1 baseline   — a client policy for EVERY client in the realm: PKCE (S256),
+//                               no implicit flow, no password grant
 //   - user "faisal"           — a local test account (password: SEYL_USER_PASSWORD in .env)
+//   - master realm            — brute-force protection for the admin account
 
-export {};
+import { keycloakAdmin } from "./lib/keycloak-admin.js";
 
 try {
   process.loadEnvFile();
 } catch {}
 
-const KEYCLOAK = process.env.KEYCLOAK_URL ?? "http://localhost:8080/auth";
+const { url: KEYCLOAK, close } = await keycloakAdmin();
 const PUBLIC_URL = process.env.SEYL_PUBLIC_URL ?? "http://localhost:8080";
 const REALM = "seyl";
 
@@ -47,12 +49,17 @@ async function admin(method: string, path: string, body?: unknown) {
 const realm = {
   realm: REALM,
   displayName: "seyl-ai",
+  loginTheme: "seyl", // the app's look on the login page (keycloak/themes/seyl)
   enabled: true,
   registrationAllowed: false, // accounts are created by an admin, not by strangers
   loginWithEmailAllowed: true,
   bruteForceProtected: true, // lock out password guessing
   accessTokenLifespan: 300,
   ssoSessionIdleTimeout: 8 * 3600,
+  // Refresh tokens are single-use (OAuth 2.1 rule for public clients such as the account
+  // console). seyl-web doesn't keep refresh tokens at all.
+  revokeRefreshToken: true,
+  refreshTokenMaxReuse: 0,
 };
 const existingRealm = await admin("GET", `/${REALM}`);
 await admin(existingRealm ? "PUT" : "POST", existingRealm ? `/${REALM}` : "", realm);
@@ -82,13 +89,51 @@ const client = {
   webOrigins: [PUBLIC_URL],
   attributes: {
     "pkce.code.challenge.method": "S256", // PKCE required
-    "post.logout.redirect.uris": `${PUBLIC_URL}/*`,
+    "post.logout.redirect.uris": `${PUBLIC_URL}/`, // exact: no wildcard (no redirect to arbitrary paths)
   },
 };
 const [existingClient] = ((await admin("GET", `/${REALM}/clients?clientId=seyl-web`)) ?? []) as { id: string }[];
 if (existingClient) await admin("PUT", `/${REALM}/clients/${existingClient.id}`, { ...client, id: existingClient.id });
 else await admin("POST", `/${REALM}/clients`, client);
 console.log(`✓ client seyl-web ${existingClient ? "updated" : "created"} (confidential, code flow + PKCE S256)`);
+
+// ── OAuth 2.1 baseline for every client in the realm ──
+// seyl-web is already configured this way; the policy makes it the rule for ALL clients —
+// including the ones Keycloak creates itself (e.g. "admin-cli" allows the password grant).
+// Not Keycloak's built-in "oauth-2-1-for-confidential-client" profile: that one also demands
+// signed-JWT client authentication and certificate-bound tokens, which seyl-web doesn't do.
+await admin("PUT", `/${REALM}/client-policies/profiles`, {
+  profiles: [
+    {
+      name: "seyl-oauth-2-1-baseline",
+      description: "PKCE with S256, no implicit flow, no password grant",
+      executors: [
+        { executor: "pkce-enforcer", configuration: { "auto-configure": "true" } },
+        { executor: "reject-implicit-grant", configuration: { "auto-configure": "true" } },
+        { executor: "reject-ropc-grant", configuration: { "auto-configure": "true" } },
+      ],
+    },
+  ],
+});
+await admin("PUT", `/${REALM}/client-policies/policies`, {
+  policies: [
+    {
+      name: "seyl-oauth-2-1-baseline",
+      description: "Applies the OAuth 2.1 baseline to every client",
+      enabled: true,
+      conditions: [{ condition: "any-client", configuration: {} }],
+      profiles: ["seyl-oauth-2-1-baseline"],
+    },
+  ],
+});
+// And switch the password grant off on the realm's own admin-cli client (nothing uses it).
+const [realmAdminCli] = ((await admin("GET", `/${REALM}/clients?clientId=admin-cli`)) ?? []) as { id: string }[];
+if (realmAdminCli) await admin("PUT", `/${REALM}/clients/${realmAdminCli.id}`, { id: realmAdminCli.id, clientId: "admin-cli", directAccessGrantsEnabled: false });
+console.log("✓ client policy: PKCE (S256), no implicit flow, no password grant — for every client");
+
+// ── Master realm: lock out password guessing on the admin account too ──
+await admin("PUT", "/master", { realm: "master", bruteForceProtected: true });
+console.log("✓ master realm: brute-force protection on");
 
 // ── Test user ──
 const user = {
@@ -105,3 +150,5 @@ else await admin("POST", `/${REALM}/users`, user);
 const [{ id: userId }] = (await admin("GET", `/${REALM}/users?username=faisal&exact=true`)) as { id: string }[];
 await admin("PUT", `/${REALM}/users/${userId}/reset-password`, { type: "password", value: required("SEYL_USER_PASSWORD"), temporary: false });
 console.log(`✓ user faisal ${existingUser ? "updated" : "created"} (password from .env: SEYL_USER_PASSWORD)`);
+
+close();

@@ -33,6 +33,7 @@ COPY --chown=node:node workspace /workspace-seed
 RUN mkdir -p /data && chown node:node /data
 ENV NODE_ENV=production \
     SEYL_WORKSPACE=/workspace \
+    HOST=0.0.0.0 \
     OPENCODE_HOSTNAME=0.0.0.0 \
     XDG_DATA_HOME=/data/share \
     XDG_CACHE_HOME=/data/cache \
@@ -42,6 +43,6 @@ ENV NODE_ENV=production \
 # Don't run as root.
 USER node
 
-EXPOSE 3000 4097
+EXPOSE 3000 3001 4097
 # Default: the backend API. The harness container overrides this with server/harness.ts.
 CMD ["node", "--import", "tsx", "server/index.ts"]

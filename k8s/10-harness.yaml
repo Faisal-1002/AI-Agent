@@ -54,8 +54,8 @@ spec:
             - name: LITELLM_KEY_HARNESS # this pod's own key: chat models only
               valueFrom:
                 secretKeyRef: { name: seyl-secrets, key: LITELLM_KEY_HARNESS }
-            - name: SEYL_API_URL # the api's MCP tool server (document tools)
-              value: http://api:3000
+            - name: SEYL_MCP_URL # the api's MCP tool server (document tools) — its own port
+              value: http://api:3001/mcp
             - name: SEYL_MCP_TOKEN
               valueFrom:
                 secretKeyRef: { name: seyl-secrets, key: SEYL_MCP_TOKEN }

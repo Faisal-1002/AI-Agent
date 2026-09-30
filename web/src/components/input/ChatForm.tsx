@@ -1,14 +1,14 @@
-import { Lightbulb, Paperclip, X } from "lucide-react";
-import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent } from "react";
+import { Lightbulb } from "lucide-react";
+import { useCallback, useEffect, useState, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent } from "react";
 import TextareaAutosize from "react-textarea-autosize";
-import type { ImageAttachment } from "../../../../shared/chat";
-import { isImage, prepareImage } from "../../lib/images";
+import type { AttachedDocument, ImageAttachment } from "../../../../shared/chat";
+import { useAttachments } from "../../hooks/useAttachments";
 import { cn } from "../../lib/cn";
-import { IconButton } from "../ui/IconButton";
+import { AttachMenu } from "./AttachMenu";
+import { Attachments } from "./Attachments";
 import { ComposerButton } from "./ComposerButton";
 import { MicButton } from "./MicButton";
 
-const MAX_IMAGES = 4;
 const THINK_KEY = "seyl.think";
 
 // "Think" is remembered per browser; storage can be unavailable (private mode), hence try/catch.
@@ -23,21 +23,24 @@ const savedThink = () => {
 type Props = {
   busy: boolean;
   canTranscribe: boolean; // speech-to-text service is up → show the 🎤 button
-  canAttachImages: boolean; // the model can see images → show the 📎 button
-  onSend: (text: string, images: ImageAttachment[], think: boolean) => Promise<boolean>; // false = refused (e.g. by the safety filter)
+  canAttachImages: boolean; // the model can see images → offer "Upload image"
+  // false = refused (e.g. by the safety filter): the message and attachments come back.
+  onSend: (text: string, images: ImageAttachment[], think: boolean, documents: AttachedDocument[]) => Promise<boolean>;
   onStop: () => void;
 };
 
 // The message box: grows with the text, Enter sends, Shift+Enter adds a new line.
-// Images can be attached with 📎, pasted, or dropped onto it.
+// 📎 attaches images or documents; files can also be pasted or dropped onto it.
 export function ChatForm({ busy, canTranscribe, canAttachImages, onSend, onStop }: Props) {
   const [text, setText] = useState("");
-  const [images, setImages] = useState<ImageAttachment[]>([]);
   const [hint, setHint] = useState<string>();
   // Off by default: answers come 2–4x faster. On: the model reasons first ("Thoughts").
   const [think, setThink] = useState(savedThink);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const canSend = (text.trim().length > 0 || images.length > 0) && !busy;
+  const attachments = useAttachments({ canAttachImages, onHint: useCallback((h: string) => setHint(h), []) });
+  const hasContent = text.trim().length > 0 || attachments.images.length > 0 || attachments.ready.length > 0;
+  // Not while documents are still being prepared — or if one failed: sending without it would
+  // look fine, but the agent wouldn't have the file you meant.
+  const canSend = hasContent && !busy && !attachments.waiting && attachments.failed.length === 0;
 
   // Hints ("didn't catch that", "only images") fade out on their own.
   useEffect(() => {
@@ -46,27 +49,17 @@ export function ChatForm({ busy, canTranscribe, canAttachImages, onSend, onStop 
     return () => clearTimeout(timer);
   }, [hint]);
 
-  const addImages = async (files: File[]) => {
-    if (!canAttachImages || files.length === 0) return;
-    const usable = files.filter(isImage);
-    if (usable.length < files.length) setHint("Only PNG, JPEG, WebP or GIF images can be attached.");
-    const room = MAX_IMAGES - images.length;
-    if (usable.length > room) setHint(`Up to ${MAX_IMAGES} images per message.`);
-    const prepared = await Promise.all(usable.slice(0, Math.max(0, room)).map(prepareImage));
-    setImages((current) => [...current, ...prepared].slice(0, MAX_IMAGES));
-  };
-
   const submit = () => {
     if (!canSend) return;
     const sentText = text.trim();
-    const sentImages = images;
+    const documents = attachments.ready;
+    const taken = attachments.take();
     setText("");
-    setImages([]);
     // If the message was refused, give it back so nothing is lost.
-    onSend(sentText, sentImages, think).then((ok) => {
+    onSend(sentText, taken.images, think, documents).then((ok) => {
       if (ok) return;
       setText((current) => current || sentText);
-      setImages((current) => (current.length ? current : sentImages));
+      attachments.restore(taken);
     });
   };
 
@@ -88,16 +81,16 @@ export function ChatForm({ busy, canTranscribe, canAttachImages, onSend, onStop 
 
   const onPaste = (e: ClipboardEvent) => {
     const files = [...e.clipboardData.files];
-    if (files.length && canAttachImages) {
+    if (files.length) {
       e.preventDefault();
-      void addImages(files);
+      attachments.addFiles(files);
     }
   };
 
   const onDrop = (e: DragEvent) => {
     if (!e.dataTransfer.files.length) return;
     e.preventDefault();
-    void addImages([...e.dataTransfer.files]);
+    attachments.addFiles([...e.dataTransfer.files]);
   };
 
   return (
@@ -111,40 +104,18 @@ export function ChatForm({ busy, canTranscribe, canAttachImages, onSend, onStop 
       className="mx-auto w-full max-w-3xl px-4 md:px-5"
     >
       <div className="rounded-3xl border border-border-light bg-surface-chat p-2 shadow-md transition-colors focus-within:border-border-medium">
-        {images.length > 0 && (
-          <div className="flex gap-2 px-2 pb-1 pt-1">
-            {images.map((image, i) => (
-              <div key={i} className="group relative">
-                <img src={image.dataUrl} alt={image.name} className="size-16 rounded-xl border border-border-light object-cover" />
-                <button
-                  type="button"
-                  aria-label={`Remove ${image.name}`}
-                  onClick={() => setImages((current) => current.filter((_, j) => j !== i))}
-                  className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-text-primary text-surface-primary"
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        <Attachments
+          images={attachments.images}
+          documents={attachments.documents}
+          onRemoveImage={attachments.removeImage}
+          onRemoveDocument={attachments.removeDocument}
+        />
         <div className="flex items-end gap-1">
-          {canAttachImages && (
-            <>
-              <IconButton icon={Paperclip} label="Attach images" onClick={() => fileInput.current?.click()} className="rounded-full" />
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  void addImages([...(e.target.files ?? [])]);
-                  e.target.value = "";
-                }}
-              />
-            </>
-          )}
+          <AttachMenu
+            canAttachImages={canAttachImages}
+            onImages={(files) => void attachments.addImages(files)}
+            onDocuments={attachments.addDocuments}
+          />
           <TextareaAutosize
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -155,13 +126,17 @@ export function ChatForm({ busy, canTranscribe, canAttachImages, onSend, onStop 
             autoFocus
             minRows={1}
             maxRows={12}
-            className={`my-1.5 flex-1 resize-none bg-transparent leading-6 text-text-primary placeholder:text-text-tertiary focus:outline-none ${canAttachImages ? "pl-1" : "pl-3"}`}
+            className="my-1.5 flex-1 resize-none bg-transparent pl-1 leading-6 text-text-primary placeholder:text-text-tertiary focus:outline-none"
           />
           <button
             type="button"
             onClick={toggleThink}
             aria-pressed={think}
-            title={think ? "Thinking on: slower, reasons step by step first" : "Think before answering (slower, for harder questions)"}
+            title={
+              think
+                ? "Thinking on: slower, reasons step by step first"
+                : "Think before answering (slower, for harder questions). Questions about your files and documents always think first."
+            }
             className={cn(
               "mb-0.5 inline-flex h-8 shrink-0 items-center gap-1 rounded-full border px-2.5 text-sm transition-colors",
               think
@@ -182,7 +157,15 @@ export function ChatForm({ busy, canTranscribe, canAttachImages, onSend, onStop 
           {busy ? <ComposerButton mode="stop" onClick={onStop} /> : <ComposerButton mode="send" disabled={!canSend} />}
         </div>
       </div>
-      {hint && <p className="px-5 pt-1.5 text-xs text-text-destructive">{hint}</p>}
+      {hint ? (
+        <p className="px-5 pt-1.5 text-xs text-text-destructive">{hint}</p>
+      ) : attachments.failed.length > 0 ? (
+        <p className="px-5 pt-1.5 text-xs text-text-destructive">
+          {attachments.failed.map((d) => d.name).join(", ")} couldn't be added — remove it to send, or try uploading it again.
+        </p>
+      ) : (
+        attachments.waiting && <p className="px-5 pt-1.5 text-xs text-text-tertiary">Preparing your documents — you can send once they're ready.</p>
+      )}
     </form>
   );
 }

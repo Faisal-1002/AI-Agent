@@ -24,8 +24,8 @@ export const OPENCODE_URL = env.OPENCODE_URL ?? `http://127.0.0.1:${OPENCODE_POR
 export const LLM_GATEWAY_URL = env.LLM_GATEWAY_URL ?? "http://127.0.0.1:4000";
 const HARNESS_KEY = env.LITELLM_KEY_HARNESS;
 
-// seyl-ai's MCP tool server (server/mcp.ts, in the api) — the agent's document tools.
-const SEYL_API_URL = env.SEYL_API_URL ?? "http://127.0.0.1:3000";
+// seyl-ai's MCP tool server (server/mcp.ts, in the api, own port) — the agent's document tools.
+const MCP_URL = env.SEYL_MCP_URL ?? "http://127.0.0.1:3001/mcp";
 const MCP_TOKEN = env.SEYL_MCP_TOKEN ?? "";
 
 // The folder the agent is allowed to work in. OpenCode treats it as its "project".
@@ -121,7 +121,7 @@ export const config: Config = {
   mcp: {
     docs: {
       type: "remote",
-      url: `${SEYL_API_URL}/mcp`,
+      url: MCP_URL,
       headers: { Authorization: `Bearer ${MCP_TOKEN}` },
       oauth: false,
       timeout: 30_000,

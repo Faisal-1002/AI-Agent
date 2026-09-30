@@ -12,7 +12,7 @@ services:
     environment:
       LLM_GATEWAY_URL: http://litellm:4000
       LITELLM_KEY_HARNESS: ${LITELLM_KEY_HARNESS}
-      SEYL_API_URL: http://api:3000 # the api's MCP tool server
+      SEYL_MCP_URL: http://api:3001/mcp # the api's MCP tool server (its own port, not published)
       SEYL_MCP_TOKEN: ${SEYL_MCP_TOKEN}
     volumes:
       - opencode-data:/data # sessions survive restarts
@@ -44,7 +44,7 @@ services:
   web:
     build: { context: ., dockerfile: deploy/web.Dockerfile }
     image: seyl-ai/web:dev
-    ports: ["8080:80"]
+    ports: ["127.0.0.1:8080:80"] # this PC only — not other devices on the network
     depends_on: [api, keycloak] # nginx proxies /api and /auth to them
 
   # ── Model side ────────────────────────────────────────────────────────────
@@ -69,7 +69,8 @@ services:
   # Keycloak: login page, users, OIDC tokens. Reached by browsers via nginx at /auth.
   # start-dev = plain HTTP and relaxed checks: fine on localhost, not for production.
   keycloak:
-    image: quay.io/keycloak/keycloak:26.7.5
+    build: { context: ., dockerfile: deploy/keycloak.Dockerfile } # + seyl-ai's login theme
+    image: seyl-ai/keycloak:dev
     command: ["start-dev"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -80,8 +81,10 @@ services:
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
       KC_HOSTNAME: http://localhost:8080/auth # the public address tokens are issued for
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true" # the api may call it as keycloak:8080
+      KC_HOSTNAME_ADMIN: http://localhost:8081/auth # admin console: here only, not through the app
       KC_HTTP_RELATIVE_PATH: /auth
       KC_PROXY_HEADERS: xforwarded
+    ports: ["127.0.0.1:8081:8080"] # admin console + admin API for scripts (this PC only)
     depends_on:
       db: { condition: service_healthy }
 

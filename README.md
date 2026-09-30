@@ -165,21 +165,25 @@ Lessons learned:
 
 ## Documents (RAG)
 
-"Chat with your documents": upload files in the **Documents** panel (sidebar); the agent searches them when a
-question needs them.
+"Chat with your documents": upload files in the **Documents** panel (sidebar), or attach them to a message with
+📎 → **Upload document**; the agent searches them when a question needs them.
 
 ```
 upload ──► api: extract text (PDF, Word, md, txt, csv, json, html) ──► chunks (~1,200 chars, 200 overlap)
        ──► Qwen3-Embedding (via the gateway) ──► Postgres + pgvector (database "seyl", HNSW index)
 
-agent ──► MCP tool docs_search_documents ──► api /mcp ──► nearest chunks by meaning ──► answer, naming the file
+agent ──► MCP tool docs_search_documents ──► api :3001/mcp ──► nearest chunks by meaning ──► answer, naming the file
 ```
 
 - **Agentic RAG**: instead of pasting search results into every message, the agent gets **tools** — search,
   list, read a document page by page — and decides when to use them (it often refines its query and searches twice).
 - **MCP** (Model Context Protocol, `server/mcp.ts`): the open standard for agent tools. OpenCode connects to it as
-  a remote MCP server (`mcp.docs` in `server/opencode.ts`); any MCP client could use the same tools. It lives at
-  `/mcp` — outside `/api`, so nginx never exposes it — and requires the `SEYL_MCP_TOKEN` bearer token.
+  a remote MCP server (`mcp.docs` in `server/opencode.ts`); any MCP client could use the same tools. It has its
+  **own port** (3001, `MCP_PORT`) that nginx doesn't forward — only the harness reaches it, with the
+  `SEYL_MCP_TOKEN` bearer token (checked in constant time; requests with an `Origin` header, i.e. from a browser, get 403).
+- **Attach to a message**: 📎 → *Upload document* puts the file in the library and shows it as a chip; you can send
+  once it's indexed. The message then carries a hidden note naming the document(s), so the agent reads them first
+  (the chip is rebuilt from that note after a reload). Messages with documents always think first.
 - **pgvector** instead of a separate vector database: one Postgres (on AWS: RDS/Aurora with pgvector). seyl-ai
   has its **own database and user** (`npm run db:setup`); the gateway's admin user isn't used by the app.
 - **Asymmetric embeddings**: Qwen3-Embedding expects questions with an instruction prefix and documents without.
@@ -203,6 +207,13 @@ Lessons learned:
 - **Small models wander**: the agent sometimes looks for uploaded documents with `glob`/`read` first, wasting
   steps. Clearer tool descriptions help; it's a target for the optimization phase.
 - **Measure, don't guess**: every change above was checked with repeated runs, not one lucky answer.
+- **"Not under /api" is not "not reachable".** `/mcp` sat outside `/api` so that nginx wouldn't forward it — but
+  an audit sent `GET /api/..\mcp`: nginx saw a path under `/api/` and passed it on; Node reads `\` as `/` and
+  resolved it to `/mcp`. Now MCP has its own port, and nginx refuses backslashes outright.
+- **Without thinking, the model skipped the lookup.** With *Think* off (the fast default), "what do my documents
+  say?" was answered from the file *names* — or with an invented `contract.pdf` (the example name in our own system
+  prompt!). With thinking on it searched every time (6/6). Now example names are gone from the prompt, and
+  questions that mention files or documents always think first (`shouldThink` in `server/index.ts`).
 
 ## Login
 
@@ -212,22 +223,52 @@ same code works with any OIDC provider (on AWS: Amazon Cognito).
 ```
 Sign in ──► /api/auth/login: PKCE verifier + state + nonce (encrypted, 10-min cookie) ──► Keycloak login page (/auth)
        ◄── /api/auth/callback?code ── api exchanges the code server-to-server (client secret + PKCE verifier),
-           openid-client verifies the ID token (signature, issuer, audience, nonce, expiry)
+           openid-client verifies the ID token (signature via Keycloak's keys, issuer, audience, nonce, expiry)
        ◄── HttpOnly cookie "seyl_session" (random id; only its SHA-256 is stored in Postgres)
 ```
 
 - **Backend for frontend (BFF)**: the api does the whole OAuth 2.1 flow (Authorization Code + PKCE). Tokens never
   reach the browser — `document.cookie` is empty, so a malicious script has nothing to steal.
 - **Keycloak client**: confidential, code flow + PKCE S256 only; implicit flow and password grant off (both removed
-  in OAuth 2.1). Self-registration off; brute-force protection on.
+  in OAuth 2.1). Self-registration off; brute-force protection on (also for the admin realm).
+- **Looks like the app**: the sign-in screen follows LibreChat's layout, and Keycloak's password page uses a custom
+  theme with the same design (`keycloak/themes/seyl`, baked into `seyl-ai/keycloak` — `deploy/keycloak.Dockerfile`).
+  Error messages are codes in the URL (`?login_error=expired`); the words come from the app, so a crafted link
+  can't put its own text on the login page.
 - **Per-user conversations**: each conversation belongs to its creator; someone else's id → `404` (not 403, which
   would confirm it exists). Conversations from before login existed went to the first user who signed in.
 - **Sign out** ends the session in the api *and* at Keycloak (otherwise "Sign in" would log straight back in).
 - **Test it**: `npm run auth:test` creates two temporary users and checks 12 things — PKCE, wrong password,
   isolation (list and by id), logout, cookie replay — then deletes them.
 - Setup: `npm run auth:setup` creates the realm `seyl`, the client `seyl-web` and a local account `faisal`
-  (password: `SEYL_USER_PASSWORD` in `.env`). Keycloak admin console: http://localhost:8080/auth/admin
-  (user `admin`, password `KEYCLOAK_ADMIN_PASSWORD`).
+  (password: `SEYL_USER_PASSWORD` in `.env`). The admin console is **not** published through the app:
+  `kubectl -n seyl-ai port-forward svc/keycloak 8081:8080` (Compose: already on `127.0.0.1:8081`), then
+  http://localhost:8081/auth/admin (user `admin`, password `KEYCLOAK_ADMIN_PASSWORD`). The admin scripts start
+  that port-forward themselves (`scripts/lib/keycloak-admin.ts`).
+
+### OAuth 2.1
+
+OAuth 2.1 isn't a new protocol: it's OAuth 2.0 minus the risky parts (implicit flow, password grant, PKCE "plain",
+tokens in URLs) with the best practices made mandatory (PKCE, exact redirect URIs). Still an IETF draft
+(draft-ietf-oauth-v2-1-16, Sept 2026). An 8-agent audit (four auditors, each checked by a skeptic, with live tests)
+compared seyl-ai against it, the browser-app BFF draft and the security BCP (RFC 9700):
+
+| | |
+|---|---|
+| **Met** (tested live) | code flow + PKCE S256 (no-PKCE and "plain" rejected), no implicit / password grant, exact redirect URIs (6 variants rejected), state + nonce, issuer check incl. the `iss` parameter, tokens never in the browser |
+| **Fixed after the audit** | open redirect in `returnTo` (`/\evil.example` counted as a local path — now resolved like a browser and compared by origin); ID token signature now checked; wildcard logout redirect → exact; OAuth 2.1 rules as a Keycloak **client policy for every client** (PKCE S256, no implicit, no password grant — Keycloak's own `admin-cli` allowed the password grant); refresh tokens single-use |
+| **Also fixed** | `/mcp` reachable through nginx (see Documents); admin console + admin realm no longer published; nginx answers only for `localhost`/`127.0.0.1` (stops DNS rebinding — not a network boundary, see below); CSRF protection (`server/csrf.ts`: every change needs the `X-Seyl-Csrf` header, which other sites can't send); security headers (CSP, no framing); approvals bound to their conversation; the api refuses weak or missing secrets and a mistyped `AUTH_ENABLED` |
+| **For AWS** | HTTPS everywhere (OAuth 2.1 requires it); a password on the OpenCode harness + network policies; per-user documents and workspaces; "Allow for this chat" is instance-wide in OpenCode; back-channel logout; `private_key_jwt` client auth |
+
+**Other devices on your network**: Compose publishes the app on `127.0.0.1` only. Docker Desktop's Kubernetes
+LoadBalancer, though, listens on every network interface, and Docker's own firewall rule allows inbound traffic —
+so on a shared network, another device can reach `<your PC's IP>:8080` (sending `Host: localhost` gets past
+nginx's check). The fix is a firewall rule blocking TCP 8080 from other hosts; that's a system setting, left to you.
+
+Not Keycloak's built-in `oauth-2-1-for-confidential-client` profile: it also requires signed-JWT client
+authentication and certificate-bound tokens, which would break seyl-web today. The custom baseline gets the rest.
+MCP's own OAuth 2.1 flow is optional and meant for third-party MCP clients — one internal caller with a strong
+shared secret doesn't need it.
 
 Lessons learned:
 
@@ -237,7 +278,13 @@ Lessons learned:
   `customFetch` sends back-channel calls to the internal address. Verified from both sides: same issuer.
 - **Keycloak 24+ requires a last name** by default (declarative user profile) → an extra "verify profile" form on
   first login. `auth:setup` makes names optional — and keeps real names out of a public repo.
-- **No open redirects**: `returnTo` must be a local path (`/…`, not `//evil.com`).
+- **Check the docs against the code.** The README said "no open redirects" and "the signature is checked" — the
+  audit found both untrue (`/\evil.com` passed the "starts with one slash" test; openid-client only checks
+  signatures when asked, relying on HTTPS otherwise). A claim in the docs is a test nobody ran.
+- **Verify the fix, too.** A second round of agents (attackers + reviewers + skeptics) broke the first open-redirect
+  fix: resolving `/.//evil.example` like a browser *produces* `//evil.example` — another site. Now a result that
+  starts with `//` is refused as well. The same round found 11 smaller issues (bad input → 502 instead of 400, file
+  names that could smuggle text into the model's note, a menu that trapped keyboard focus, …); all fixed and re-tested.
 - **Local shortcuts, not for production**: Keycloak `start-dev`, plain HTTP, short test passwords.
 - **Still shared between users**: the document library and the workspace files. Making them per-user means passing
   *who is asking* through the agent into its tools (MCP) — and a separate workspace per user. That's part of the
@@ -278,7 +325,8 @@ Lessons learned:
 
 ## Images
 
-Attach up to 4 images to a message — 📎 button, paste, or drag & drop — and ask about them. Qwen3.5 9B reads them.
+Attach up to 4 images to a message — 📎 → *Upload image*, paste, or drag & drop — and ask about them. Qwen3.5 9B
+reads them (it's natively multimodal: the same model chats and sees).
 
 ```
 image ──► browser: shrink to ≤ 1280 px, JPEG (web/src/lib/images.ts) ──► api ──► OpenCode file part (data: URL)
@@ -350,7 +398,8 @@ call). RTX 3080 10 GB, i7-14700K.
   thought tokens per step — 2–4× slower — and, with thinking on, a turn sometimes ended with the answer *only* in
   the thoughts. Off, it answered everything in the tests correctly (including the bat-and-ball trick question), so
   off is the default; turn it on for harder questions. Technically an OpenCode model **variant**
-  (`fast`: `reasoningEffort: "none"`) chosen per message.
+  (`fast`: `reasoningEffort: "none"`) chosen per message. Exception: questions about files or documents, and
+  messages with attached documents, always think — without it the model skipped the lookup (see Documents).
 - **keep_alive** (`gateway/config.yaml`, `extra_body`): Ollama unloads a model after 5 idle minutes; reloading the
   9B took ~11 s of the first reply. Now 1 hour — set per request through the gateway, no change to Ollama itself.
 - **Warm-up** (`server/warmup.ts`): when the UI opens after 50+ idle minutes, the api sends a 1-token request to
@@ -391,17 +440,18 @@ Browser ──► │ web ×2 (nginx)  ──/api──►  api ×2  ──►  
             └────────────────────────────────────────────────────────┘
 ```
 
-Five images:
+Six images:
 
 | Image | Built from | Runs |
 |---|---|---|
 | `seyl-ai/app:dev` | `deploy/app.Dockerfile` | the **api** (default command) *or* the **harness** (`server/harness.ts`) |
-| `seyl-ai/web:dev` | `deploy/web.Dockerfile` | nginx serving the built UI, proxying `/api` → `api:3000` (`deploy/nginx.conf`) |
+| `seyl-ai/web:dev` | `deploy/web.Dockerfile` | nginx serving the built UI, proxying `/api` → `api:3000` and the `seyl` realm → Keycloak; only for `localhost`, with security headers (`deploy/nginx.conf`) |
 | `seyl-ai/asr:dev` | `voice/asr/Dockerfile` | speech-to-text service (Python, CPU PyTorch, ffmpeg) |
 | `seyl-ai/tts:dev` | `voice/tts/Dockerfile` | text-to-speech service (Python, CPU PyTorch) |
 | `seyl-ai/gateway:dev` | `gateway/Dockerfile` | LiteLLM with `gateway/config.yaml` baked in |
+| `seyl-ai/keycloak:dev` | `deploy/keycloak.Dockerfile` | Keycloak 26.7.5 with the seyl-ai login theme |
 
-Plus `pgvector/pgvector:0.8.6-pg16-trixie` (gateway + seyl-ai data) and `quay.io/keycloak/keycloak` (login).
+Plus `pgvector/pgvector:0.8.6-pg16-trixie` (gateway + seyl-ai data).
 
 Docker Desktop needs ~6 GB of its memory idle, ~14 GB while both voice models are loaded (~4 GB each; Keycloak
 ~0.9 GB, LiteLLM ~0.6 GB).
@@ -416,7 +466,8 @@ npm run db:setup
 npm run auth:setup
 ```
 
-Open http://localhost:8080. Stop with `docker compose down` (chats are kept in the `opencode-data` volume).
+Open http://localhost:8080 — published on `127.0.0.1` only, so other devices on your network can't reach it.
+Stop with `docker compose down` (chats are kept in the `opencode-data` volume).
 
 ### Kubernetes (Docker Desktop)
 
@@ -436,7 +487,7 @@ kubectl -n seyl-ai port-forward svc/litellm 4001:4000
 GATEWAY_URL=http://127.0.0.1:4001 npm run gateway:keys
 kubectl -n seyl-ai port-forward svc/db 5433:5432
 DB_PORT=5433 npm run db:setup
-npm run auth:setup   # Keycloak is reachable through nginx at localhost:8080/auth
+npm run auth:setup   # reaches Keycloak's admin API through its own port-forward
 ```
 
 Open http://localhost:8080. Things to try:
@@ -454,11 +505,11 @@ After changing code: `docker compose build` then `kubectl -n seyl-ai rollout res
 |---|---|
 | `k8s/00-namespace.yaml` | the `seyl-ai` namespace |
 | `k8s/10-harness.yaml` | harness Deployment (1 replica, `Recreate`), 1 GiB PersistentVolumeClaim for sessions and the workspace (seeded by an `initContainer`), ClusterIP Service |
-| `k8s/20-api.yaml` | api Deployment (2 replicas) with readiness + liveness probes on `/api/healthz`, `preStop` pause, ClusterIP Service |
+| `k8s/20-api.yaml` | api Deployment (2 replicas) with readiness + liveness probes on `/api/healthz`, `preStop` pause, ClusterIP Service: 3000 (api, via nginx) and 3001 (MCP tools, harness only) |
 | `k8s/30-web.yaml` | web Deployment (2 replicas), `preStop` pause, LoadBalancer Service on port 8080 |
 | `k8s/40-asr.yaml`, `k8s/50-tts.yaml` | voice Deployments (1 replica each) with a 5 GiB volume for the model, a `startupProbe` that allows 10 min for the first download, memory limits sized from peak usage |
 | `k8s/60-postgres.yaml` | Postgres 16 + pgvector (`0.8.6-pg16-trixie`, 1 replica, 2 GiB volume): the gateway's database and seyl-ai's documents; on AWS a managed database (RDS) |
-| `k8s/80-keycloak.yaml` | Keycloak 26.7.5 (`start-dev`, its own database), public URL via nginx at `/auth`, back channel `keycloak:8080` |
+| `k8s/80-keycloak.yaml` | Keycloak 26.7.5 + seyl-ai's login theme (`seyl-ai/keycloak:dev`, `start-dev`, its own database); users reach only the `seyl` realm via nginx at `/auth`; back channel `keycloak:8080`; admin console on `localhost:8081` via port-forward |
 | `k8s/70-litellm.yaml` | the gateway: secrets from the Secret, `DATABASE_URL` composed with `$(POSTGRES_PASSWORD)`, readiness = gateway + database up, not exposed outside the cluster |
 | `kustomization.yaml` | lists the manifests; generates the `seyl-secrets` Secret from `.env` (hash-suffixed name, references rewritten) |
 
@@ -490,7 +541,9 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `OIDC_ISSUER` / `OIDC_INTERNAL_ISSUER` | `<public>/auth/realms/seyl` / unset | api: the issuer, and how to reach it from inside the cluster |
 | `OIDC_CLIENT_SECRET`, `SEYL_SESSION_SECRET` | from `.env` | api: client secret at Keycloak; key for the login cookie |
 | `SEYL_DB_HOST` / `SEYL_DB_PORT` / `SEYL_DB_PASSWORD` | `127.0.0.1` / `5432` / from `.env` | api: seyl-ai's own database |
-| `SEYL_API_URL` | `http://127.0.0.1:3000` | harness → the api's MCP tool server |
+| `SEYL_MCP_URL` | `http://127.0.0.1:3001/mcp` | harness → the api's MCP tool server |
+| `HOST`, `PORT`, `MCP_PORT` | `127.0.0.1`, `3000`, `3001` | api: where it listens (containers set `HOST=0.0.0.0`) |
+| `KEYCLOAK_URL` | port-forward to `127.0.0.1:8081/auth` | scripts: Keycloak's admin API |
 | `SEYL_MCP_TOKEN` | from `.env` | harness ↔ api: bearer token for `/mcp` |
 
 ## Project layout
@@ -515,6 +568,11 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `server/mcp.ts` | MCP tool server for the agent (search / list / read documents) |
 | `scripts/db-setup.ts` | Creates seyl-ai's database, user and the pgvector extension (`npm run db:setup`) |
 | `server/auth.ts`, `server/owners.ts` | Login (OIDC, BFF, sessions) and conversation ownership |
+| `server/csrf.ts` | Cross-site request protection for every state-changing API call |
+| `keycloak/themes/seyl`, `deploy/keycloak.Dockerfile` | Keycloak login theme in the app's (LibreChat's) design, baked into `seyl-ai/keycloak` |
+| `scripts/lib/keycloak-admin.ts` | Reach Keycloak's admin API directly (starts a port-forward if needed) |
+| `web/src/components/input/AttachMenu.tsx`, `Attachments.tsx`, `web/src/hooks/useAttachments.ts` | 📎 menu (image / document), attachment chips, upload + indexing status |
+| `web/src/components/ui/Menu.tsx` | Reusable pop-up menu (keyboard + click-outside) |
 | `scripts/auth-setup.ts`, `scripts/auth-test.ts` | Configure Keycloak (`npm run auth:setup`); login security test (`npm run auth:test`) |
 | `scripts/lib/session.ts` | Cookie jar + scripted OIDC sign-in, used by the scripts |
 | `web/src/components/auth/LoginScreen.tsx`, `web/src/hooks/useAuth.ts` | Sign-in screen; who's signed in |
@@ -537,6 +595,8 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 
 ### Backend API
 
+Every request that changes something (POST, PUT, DELETE) must send `X-Seyl-Csrf: 1` (`server/csrf.ts`).
+
 | Method & path | Does |
 |---|---|
 | `GET /api/auth/login` → `/api/auth/callback` | Sign in (OIDC redirect flow) |
@@ -546,7 +606,7 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `POST /api/conversations` | Create one |
 | `DELETE /api/conversations/:id` | Delete one |
 | `GET /api/conversations/:id/messages` | History + whether the agent is still working |
-| `POST /api/conversations/:id/prompt` | Send a message: `{ text, images?, think? }` (reply arrives on the event stream) |
+| `POST /api/conversations/:id/prompt` | Send a message: `{ text, images?, documents?: [{ id }], think? }` (reply arrives on the event stream) |
 | `POST /api/conversations/:id/permissions/:requestID` | Answer an approval request: `{ reply: "once" \| "always" \| "reject" }` |
 | `POST /api/conversations/:id/abort` | Stop the agent |
 | `GET /api/conversations/:id/events` | Live updates (Server-Sent Events) |

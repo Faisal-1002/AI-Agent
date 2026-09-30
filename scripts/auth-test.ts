@@ -2,8 +2,10 @@
 // HTTP (the full OIDC flow, no browser), checks isolation, then deletes the users.
 //
 //   npm run auth:test          (app at http://localhost:8080; needs .env for the Keycloak admin)
+//   Keycloak's admin API is reached directly, not through the app (scripts/lib/keycloak-admin.ts).
 
 import { randomBytes } from "node:crypto";
+import { keycloakAdmin } from "./lib/keycloak-admin.js";
 import { Session } from "./lib/session.js";
 
 try {
@@ -11,7 +13,7 @@ try {
 } catch {}
 
 const APP = process.env.SEYL_PUBLIC_URL ?? "http://localhost:8080";
-const KEYCLOAK = `${APP}/auth`;
+const { url: KEYCLOAK, close } = await keycloakAdmin();
 let failures = 0;
 const check = (ok: boolean, what: string) => {
   console.log(`${ok ? "✓" : "✗"} ${what}`);
@@ -88,8 +90,15 @@ try {
   const anonymous = await fetch(`${APP}/api/conversations`);
   check(anonymous.status === 401, "no cookie → 401");
 } finally {
-  for (const id of created) await kc(`/users/${id}`, { method: "DELETE" });
-  console.log(`(${created.length} temporary users deleted)`);
+  // Delete every temporary user, even if one deletion fails.
+  let deleted = 0;
+  for (const id of created) {
+    const res = await kc(`/users/${id}`, { method: "DELETE" }).catch(() => undefined);
+    if (res?.ok) deleted++;
+    else console.warn(`! could not delete temporary user ${id} — remove it in the Keycloak admin console`);
+  }
+  console.log(`(${deleted}/${created.length} temporary users deleted)`);
+  close();
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : "\nall checks passed");

@@ -1,6 +1,7 @@
 import { memo } from "react";
 import type { ChatPart, GuardVerdict } from "../../../../shared/chat";
 import type { Turn } from "../../lib/conversations";
+import { DocumentChip } from "../input/Attachments";
 import { Avatar } from "../ui/Avatar";
 import { CopyButton } from "../ui/CopyButton";
 import { Markdown } from "../ui/Markdown";
@@ -19,6 +20,14 @@ function Part({ part, isUser, streaming }: { part: ChatPart; isUser: boolean; st
       return <Reasoning text={part.text} thinking={streaming && !part.done} />;
     case "tool":
       return <ToolCall part={part} />;
+    case "documents":
+      return (
+        <div className="flex flex-wrap gap-2">
+          {part.documents.map((doc) => (
+            <DocumentChip key={doc.id} name={doc.name} />
+          ))}
+        </div>
+      );
     case "image":
       return (
         <a href={part.url} target="_blank" rel="noreferrer" className="w-fit" title={part.name}>

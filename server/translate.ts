@@ -1,6 +1,6 @@
 import type { AssistantMessage, Event, Message, Part, Session } from "@opencode-ai/sdk/v2";
 import type { PermissionRequest } from "@opencode-ai/sdk/v2";
-import type { ChatEvent, ChatMessage, ChatPart, Conversation, GuardFlags, PermissionAsk } from "../shared/chat.js";
+import type { AttachedDocument, ChatEvent, ChatMessage, ChatPart, Conversation, GuardFlags, PermissionAsk } from "../shared/chat.js";
 
 // Translation layer: OpenCode's rich data model → the small model our UI understands.
 
@@ -13,10 +13,20 @@ export function toConversation(session: Session): Conversation {
   return { id: session.id, title: session.title, updatedAt: session.time.updated };
 }
 
+function attachedDocuments(value: unknown, id: string): ChatPart | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const documents = value.filter(
+    (d): d is AttachedDocument => typeof d?.id === "string" && typeof d?.name === "string",
+  );
+  return documents.length ? { id, kind: "documents", documents } : undefined;
+}
+
 export function toChatPart(part: Part): ChatPart | undefined {
   switch (part.type) {
     case "text":
-      return part.synthetic ? undefined : { id: part.id, kind: "text", text: part.text };
+      if (!part.synthetic) return { id: part.id, kind: "text", text: part.text };
+      // Hidden notes aren't shown — except "attached documents", shown as file chips.
+      return attachedDocuments(part.metadata?.seylDocuments, part.id);
     case "reasoning":
       return { id: part.id, kind: "reasoning", text: part.text, done: part.time.end !== undefined };
     case "file":

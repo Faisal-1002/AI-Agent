@@ -48,6 +48,8 @@ spec:
                 secretKeyRef: { name: seyl-secrets, key: SEYL_SESSION_SECRET }
           ports:
             - containerPort: 3000
+            - containerPort: 3001 # MCP tool server: for the harness only (nginx never forwards it)
+              name: mcp
           # Zero-downtime rollouts: when a pod is told to stop, the load balancer
           # needs a few seconds to stop sending it traffic. Wait before SIGTERM,
           # otherwise requests in that window get a 502.
@@ -78,3 +80,7 @@ spec:
   ports:
     - port: 3000
       targetPort: 3000
+      name: http
+    - port: 3001
+      targetPort: 3001
+      name: mcp

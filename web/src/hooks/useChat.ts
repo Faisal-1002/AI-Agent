@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { ChatEvent, Conversation, ImageAttachment, PermissionReply } from "../../../shared/chat";
+import type { AttachedDocument, ChatEvent, Conversation, ImageAttachment, PermissionReply } from "../../../shared/chat";
 import { api } from "../lib/api";
 import { chatReducer, initialChat } from "../lib/chatReducer";
 
@@ -65,7 +65,7 @@ export function useChat(conversationId: string | undefined, handlers: Handlers) 
   useEffect(() => () => stream.current?.source.close(), []);
 
   const send = useCallback(
-    async (text: string, images: ImageAttachment[] = [], think = false): Promise<boolean> => {
+    async (text: string, images: ImageAttachment[] = [], think = false, documents: AttachedDocument[] = []): Promise<boolean> => {
       dispatch({ type: "sending" });
       try {
         let id = conversationId;
@@ -76,7 +76,7 @@ export function useChat(conversationId: string | undefined, handlers: Handlers) 
           await connect(id, true);
           handlersRef.current.onCreated(conversation);
         }
-        await api.prompt(id, { text, images, think });
+        await api.prompt(id, { text, images, think, documents });
         return true;
       } catch (err) {
         dispatch({ type: "failed", message: (err as Error).message });

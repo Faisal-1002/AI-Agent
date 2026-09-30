@@ -18,7 +18,8 @@ spec:
     spec:
       containers:
         - name: keycloak
-          image: quay.io/keycloak/keycloak:26.7.5
+          image: seyl-ai/keycloak:dev # Keycloak 26.7.5 + seyl-ai's login theme (deploy/keycloak.Dockerfile)
+          imagePullPolicy: IfNotPresent
           # start-dev: plain HTTP and relaxed checks — fine on localhost, NOT for production
           # (production: `start` with TLS and a real hostname).
           args: ["start-dev"]
@@ -43,6 +44,10 @@ spec:
               value: http://localhost:8080/auth
             - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC # server-to-server calls may use keycloak:8080
               value: "true"
+            # The admin console is NOT published through the app (deploy/nginx.conf). To use it:
+            #   kubectl -n seyl-ai port-forward svc/keycloak 8081:8080  → http://localhost:8081/auth/admin
+            - name: KC_HOSTNAME_ADMIN
+              value: http://localhost:8081/auth
             - name: KC_HTTP_RELATIVE_PATH
               value: /auth
             - name: KC_PROXY_HEADERS # it sits behind nginx

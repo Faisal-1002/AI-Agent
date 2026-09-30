@@ -1,8 +1,11 @@
-import type { ChatMessage, Conversation, DocumentInfo, GuardFlags, ModelInfo, PermissionAsk, PermissionReply, PromptRequest, User, VoiceStatus } from "../../../shared/chat";
+import { CSRF_HEADER, type ChatMessage, type Conversation, type DocumentInfo, type GuardFlags, type ModelInfo, type PermissionAsk, type PermissionReply, type PromptRequest, type User, type VoiceStatus } from "../../../shared/chat";
+
+// Every call carries the anti-CSRF header (server/csrf.ts): another site can't add it.
+const withCsrf = (init: RequestInit = {}): RequestInit => ({ ...init, headers: { [CSRF_HEADER]: "1", ...init.headers } });
 
 // Typed wrappers around the seyl-ai backend (server/index.ts).
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, init);
+  const res = await fetch(`/api${path}`, withCsrf(init));
   // Session expired (or signed out in another tab): reload, and the login screen appears.
   if (res.status === 401 && path !== "/auth/me") window.location.reload();
   if (!res.ok) {
@@ -47,19 +50,17 @@ export const api = {
 
   voiceStatus: () => request<VoiceStatus>("/voice/status"),
   // Fire and forget: start loading the speech-to-text model (the 🎤 was just pressed).
-  warmVoice: () => void fetch("/api/voice/warm", { method: "POST" }).catch(() => {}),
+  warmVoice: () => void fetch("/api/voice/warm", withCsrf({ method: "POST" })).catch(() => {}),
   transcribe: (audio: Blob) => {
     const form = new FormData();
     form.append("file", audio, audio.type.includes("ogg") ? "recording.ogg" : "recording.webm");
     return request<{ text: string; language: string | null }>("/voice/transcribe", { method: "POST", body: form });
   },
   speak: async (text: string, signal?: AbortSignal): Promise<Blob> => {
-    const res = await fetch("/api/voice/speak", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-      signal,
-    });
+    const res = await fetch(
+      "/api/voice/speak",
+      withCsrf({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }), signal }),
+    );
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText);
     return res.blob();
   },

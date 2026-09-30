@@ -12,7 +12,7 @@ import { sql } from "./db.js";
 // HttpOnly session cookie. Tokens never reach the browser (nothing for XSS to steal).
 //
 //   browser ─► /api/auth/login ─► Keycloak login page ─► /api/auth/callback?code=…
-//   api ─(back channel)─► Keycloak: code + PKCE verifier + client secret ─► ID token (verified)
+//   api ─(back channel)─► Keycloak: code + PKCE verifier + client secret ─► ID token (signature checked)
 //   api ─► session row in Postgres ─► cookie "seyl_session" (random id; only its hash is stored)
 //
 // Keycloak here, but any OIDC provider works the same (on AWS: Amazon Cognito).
@@ -27,9 +27,19 @@ const REDIRECT_URI = `${PUBLIC_URL}/api/auth/callback`;
 const SESSION_HOURS = 8;
 const SECURE_COOKIES = PUBLIC_URL.startsWith("https://") || new URL(PUBLIC_URL).hostname === "localhost";
 
-// Fail fast: with login on, a missing secret would mean a guessable cookie key.
-if (AUTH_ENABLED && (!env.SEYL_SESSION_SECRET || !env.OIDC_CLIENT_SECRET)) {
-  throw new Error("AUTH_ENABLED=true needs SEYL_SESSION_SECRET and OIDC_CLIENT_SECRET (see .env.example)");
+// Fail fast on configurations that would silently weaken login:
+// - in the containers (NODE_ENV=production), login must be switched on or off explicitly —
+//   a typo ("True", "1") must not quietly turn it off;
+// - with login on, a missing or short secret would mean a guessable cookie key;
+// - an https issuer must not be reached over plain http inside the cluster.
+if (env.NODE_ENV === "production" && env.AUTH_ENABLED !== "true" && env.AUTH_ENABLED !== "false") {
+  throw new Error(`AUTH_ENABLED must be "true" or "false" in production (got ${JSON.stringify(env.AUTH_ENABLED)})`);
+}
+if (AUTH_ENABLED && ((env.SEYL_SESSION_SECRET ?? "").length < 32 || !env.OIDC_CLIENT_SECRET)) {
+  throw new Error("AUTH_ENABLED=true needs SEYL_SESSION_SECRET (32+ characters) and OIDC_CLIENT_SECRET (see .env.example)");
+}
+if (ISSUER.startsWith("https://") && INTERNAL_ISSUER && !INTERNAL_ISSUER.startsWith("https://")) {
+  throw new Error("OIDC_INTERNAL_ISSUER must use https when the issuer does");
 }
 
 // 32-byte key for the short-lived login cookie (AES-256-GCM via jose).
@@ -42,8 +52,13 @@ let discovered: Promise<oidc.Configuration> | undefined;
 function provider(): Promise<oidc.Configuration> {
   discovered ??= oidc
     .discovery(new URL(ISSUER), CLIENT_ID, undefined, oidc.ClientSecretPost(env.OIDC_CLIENT_SECRET), {
-      // Plain HTTP is only acceptable because everything runs on localhost.
-      ...(ISSUER.startsWith("http://") && { execute: [oidc.allowInsecureRequests] }),
+      execute: [
+        // Check the ID token's signature against the issuer's published keys. (openid-client
+        // otherwise relies on HTTPS to the token endpoint instead — and locally there is none.)
+        oidc.enableNonRepudiationChecks,
+        // Plain HTTP is only acceptable because everything runs on this machine.
+        ...(ISSUER.startsWith("http://") ? [oidc.allowInsecureRequests] : []),
+      ],
       // Server-to-server: reach the issuer at its internal address (the back channel).
       [oidc.customFetch]: (url, options) =>
         fetch(INTERNAL_ISSUER && url.startsWith(ISSUER) ? INTERNAL_ISSUER + url.slice(ISSUER.length) : url, options as RequestInit),
@@ -88,18 +103,41 @@ export const requireUser = createMiddleware<{ Variables: { user: User } }>(async
 
 type LoginFlow = { verifier: string; state: string; nonce: string; returnTo: string };
 
+// Where to go after signing in: only a path on THIS site. Checking the text isn't enough —
+// browsers read "/\evil.example" or "/<tab>/evil.example" as another site — so resolve it
+// like a browser would and compare origins.
+function safeReturnTo(value: string | undefined): string {
+  // Long values: it travels in the login cookie (and nothing legitimate is that long).
+  if (!value || value.length > 512) return "/";
+  try {
+    const home = new URL(PUBLIC_URL);
+    const target = new URL(value, home);
+    if (target.origin !== home.origin || /[\\\u0000-\u001f]/.test(value)) return "/";
+    const path = target.pathname + target.search + target.hash;
+    // Resolving can itself produce "//": "/.//evil.example" → pathname "//evil.example",
+    // which a browser reads as another site. Only a single leading slash is a local path.
+    return path.startsWith("//") ? "/" : path;
+  } catch {
+    return "/";
+  }
+}
+
+// Errors the login page can show. The URL only carries a code; the words come from the app
+// (an attacker could otherwise put any text on our login screen with a crafted link).
+const LOGIN_ERRORS = new Set(["access_denied", "login_failed", "expired"]);
+const loginError = (code: string) => `/?login_error=${LOGIN_ERRORS.has(code) ? code : "login_failed"}`;
+
 export function authRoutes(onLogin: (user: User) => Promise<void>) {
   const auth = new Hono();
 
   // 1. Start: remember PKCE verifier + state + nonce (encrypted cookie), go to the login page.
   auth.get("/login", async (c) => {
     if (!AUTH_ENABLED) return c.redirect("/");
-    const returnTo = c.req.query("returnTo") ?? "/";
     const flow: LoginFlow = {
       verifier: oidc.randomPKCECodeVerifier(),
       state: oidc.randomState(),
       nonce: oidc.randomNonce(),
-      returnTo: returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/", // no open redirects
+      returnTo: safeReturnTo(c.req.query("returnTo")), // no open redirects
     };
     const sealed = await new EncryptJWT(flow).setProtectedHeader({ alg: "dir", enc: "A256GCM" }).setExpirationTime("10m").encrypt(flowKey());
     setCookie(c, "seyl_login", sealed, { httpOnly: true, secure: SECURE_COOKIES, sameSite: "Lax", path: "/api/auth", maxAge: 600 });
@@ -117,22 +155,34 @@ export function authRoutes(onLogin: (user: User) => Promise<void>) {
 
   // 2. Back from the login page: exchange the code, verify the ID token, start a session.
   auth.get("/callback", async (c) => {
-    const error = c.req.query("error");
-    if (error) return c.redirect(`/?login_error=${encodeURIComponent(c.req.query("error_description") ?? error)}`);
-
     const sealed = getCookie(c, "seyl_login");
-    if (!sealed) return c.redirect("/api/auth/login"); // flow expired or cookie lost: start over
-    const flow = (await jwtDecrypt(sealed, flowKey())).payload as unknown as LoginFlow;
-    deleteCookie(c, "seyl_login", { path: "/api/auth" });
+    deleteCookie(c, "seyl_login", { path: "/api/auth" }); // single use, whatever happens next
+    const flow = sealed ? await openFlow(sealed) : undefined;
 
-    // openid-client checks state, PKCE, nonce, issuer, audience, expiry and the token signature.
+    // An error from the login page counts only if it answers OUR pending sign-in (same state);
+    // anything else could be a crafted link (RFC 9207 §2.4).
+    const error = c.req.query("error");
+    if (error) {
+      const ours = flow !== undefined && c.req.query("state") === flow.state;
+      return c.redirect(loginError(ours && error === "access_denied" ? "access_denied" : "login_failed"));
+    }
+    if (!flow) return c.redirect(loginError("expired")); // flow expired or cookie lost
+
+    // openid-client checks state, PKCE, nonce, issuer (incl. the iss parameter), audience,
+    // expiry and — with enableNonRepudiationChecks above — the token signature.
     const callbackUrl = new URL(`${REDIRECT_URI}${new URL(c.req.url).search}`);
-    const tokens = await oidc.authorizationCodeGrant(await provider(), callbackUrl, {
-      pkceCodeVerifier: flow.verifier,
-      expectedState: flow.state,
-      expectedNonce: flow.nonce,
-      idTokenExpected: true,
-    });
+    const tokens = await oidc
+      .authorizationCodeGrant(await provider(), callbackUrl, {
+        pkceCodeVerifier: flow.verifier,
+        expectedState: flow.state,
+        expectedNonce: flow.nonce,
+        idTokenExpected: true,
+      })
+      .catch((err: Error) => {
+        console.error("[auth] sign-in failed:", err.message);
+        return undefined;
+      });
+    if (!tokens) return c.redirect(loginError("login_failed"));
     const claims = tokens.claims()!;
     const user: User = {
       sub: claims.sub,
@@ -172,4 +222,13 @@ export function authRoutes(onLogin: (user: User) => Promise<void>) {
   });
 
   return auth;
+}
+
+// The sealed login-flow cookie → its contents (undefined if expired, tampered with or unreadable).
+async function openFlow(sealed: string): Promise<LoginFlow | undefined> {
+  try {
+    return (await jwtDecrypt(sealed, flowKey())).payload as unknown as LoginFlow;
+  } catch {
+    return undefined;
+  }
 }

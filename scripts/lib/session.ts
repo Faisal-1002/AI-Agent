@@ -1,3 +1,5 @@
+import { CSRF_HEADER } from "../../shared/chat.js";
+
 // A minimal "browser" for scripts: a cookie jar, manual redirects, and the full OIDC
 // sign-in flow (app → Keycloak form → credentials → callback → session cookie).
 
@@ -18,9 +20,9 @@ export class Session {
     return res;
   }
 
-  // Calls to the app's API, relative to /api.
+  // Calls to the app's API, relative to /api (with the anti-CSRF header, like the web UI).
   api(path: string, init: RequestInit = {}) {
-    return this.go(`${this.app}/api${path}`, init);
+    return this.go(`${this.app}/api${path}`, { ...init, headers: { [CSRF_HEADER]: "1", ...(init.headers as Record<string, string>) } });
   }
 
   async signIn(username: string, password: string): Promise<Response> {

@@ -1,11 +1,11 @@
 import { CircleAlert, FileText, LoaderCircle, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import type { DocumentInfo } from "../../../../shared/chat";
+import { DOCUMENT_TYPES, type DocumentInfo } from "../../../../shared/chat";
 import { useDocuments } from "../../hooks/useDocuments";
 import { cn } from "../../lib/cn";
 import { IconButton } from "../ui/IconButton";
 
-const ACCEPT = ".pdf,.docx,.md,.txt,.csv,.json,.html";
+const ACCEPT = DOCUMENT_TYPES.map((t) => `.${t}`).join(",");
 
 const formatSize = (bytes: number) =>
   bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;

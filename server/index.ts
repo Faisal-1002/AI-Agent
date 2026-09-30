@@ -3,12 +3,13 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createMiddleware } from "hono/factory";
 import { streamSSE } from "hono/streaming";
-import type { ChatEvent, GuardFlags, ModelInfo, PermissionReply, PromptRequest, User } from "../shared/chat.js";
+import type { AttachedDocument, ChatEvent, GuardFlags, ModelInfo, PermissionReply, PromptRequest, User } from "../shared/chat.js";
 import { AUTH_ENABLED, authRoutes, requireUser } from "./auth.js";
 import { migrate } from "./db.js";
-import { addDocument, deleteDocument, fileType, listDocuments, MAX_UPLOAD_BYTES, SUPPORTED } from "./documents.js";
+import { addDocument, cleanName, deleteDocument, fileType, listDocuments, MAX_UPLOAD_BYTES, readyDocuments, SUPPORTED } from "./documents.js";
 import { reviewReply, screenPrompt } from "./guard.js";
 import { mcp } from "./mcp.js";
+import { csrfGuard } from "./csrf.js";
 import { claimUnowned, ownedBy, ownerOf, recordOwner } from "./owners.js";
 import { AGENT, client, FAST_VARIANT, MODEL, MODEL_INFO } from "./opencode.js";
 import { markUsed, warmUp } from "./warmup.js";
@@ -16,6 +17,11 @@ import { guardFlags, sessionOf, toChatEvent, toChatMessage, toConversation, toPe
 import { voice } from "./voice.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
+// The agent's MCP tool server listens on its own port, which nginx doesn't forward:
+// browsers (and anyone else reaching the app) can't get to it at all.
+const MCP_PORT = Number(process.env.MCP_PORT ?? 3001);
+// Only this machine by default (npm run dev); the containers set HOST=0.0.0.0.
+const HOST = process.env.HOST ?? "127.0.0.1";
 const app = new Hono<{ Variables: { user: User } }>();
 
 // OpenCode SDK calls return { data, error } instead of throwing; these turn
@@ -39,6 +45,8 @@ function unwrap<T>(result: { data?: T; error?: unknown }): T {
 //   would then mark every api pod unready at once (a cascading outage).
 app.get("/api/healthz", (c) => c.json({ ok: true }));
 
+// Cross-site request protection for everything that changes state (server/csrf.ts).
+app.use("/api/*", csrfGuard);
 // Sign-in (server/auth.ts). Everything else under /api needs a signed-in user.
 app.use("/api/*", requireUser);
 app.route(
@@ -77,8 +85,6 @@ app.post("/api/documents", bodyLimit({ maxSize: MAX_UPLOAD_BYTES, onError: (c) =
 });
 app.delete("/api/documents/:id", async (c) => (await deleteDocument(c.req.param("id")) ? c.body(null, 204) : c.json({ error: "Not found" }, 404)));
 
-// MCP tool server for the agent (server/mcp.ts). Deliberately outside /api: not proxied to browsers.
-app.route("/mcp", mcp);
 
 // Conversations = OpenCode sessions, each owned by the user who created it.
 // Every route with a conversation id checks ownership: someone else's is "not found".
@@ -129,14 +135,48 @@ app.get("/api/conversations/:id/messages", async (c) => {
 // Images: the browser resizes them first (fewer image tokens); these are hard limits.
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 const MAX_IMAGES = 4;
+const MAX_DOCUMENTS = 5;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_IMAGE_CHARS = 6 * 1024 * 1024; // data URL length (~4.5 MB of image)
 
-// Send a message (text and/or images). The safety filter checks the text first; if allowed,
-// the agent starts and this returns immediately — the reply arrives on the event stream.
+// Questions about the user's files or documents always think first, whatever the Think
+// toggle says. Measured with scripts/ask.ts: without thinking, the 9B often answered them
+// from file NAMES alone — or invented a document; with thinking it looked them up every time.
+// "About the user's files" = "my/the/attached … document", a file name, or the workspace —
+// not any mention of the word ("how do I read a file in Python" stays fast). Arabic: whole
+// words, with or without "ال" / a possessive ending ("ملفت" = eye-catching doesn't count).
+const NEEDS_LOOKUP = new RegExp(
+  [
+    String.raw`\b(my|the|this|these|those|attached|uploaded|our)\s+(\w+\s+)?(documents?|docs?|files?|pdfs?|uploads?|attachments?|contracts?|cv|resume|reports?|spreadsheets?|notes|slides?)\b`,
+    String.raw`\b\w[\w-]*\.(md|txt|pdf|docx?|csv|json|html?|xlsx?)\b`,
+    String.raw`\bworkspace\b`,
+    String.raw`(^|[\s،,.؟?!:])(ال)?(ملف|ملفات|مستند|مستندات|وثيقة|وثائق)(ي|ك|نا)?($|[\s،,.؟?!:])`,
+  ].join("|"),
+  "i",
+);
+const shouldThink = (requested: boolean, text: string) => requested || NEEDS_LOOKUP.test(text);
+
+// Send a message (text, images and/or documents from the library). The safety filter checks
+// the text first; if allowed, the agent starts and this returns immediately — the reply
+// arrives on the event stream.
 app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 }), async (c) => {
   const sessionID = c.req.param("id");
-  const { text = "", images = [], think = false } = await c.req.json<PromptRequest>();
-  if (!text.trim() && images.length === 0) return c.json({ error: "Empty message" }, 400);
+  const body = await c.req.json<PromptRequest>();
+  const { text = "", images = [] } = body;
+  // Check the shape first: a bad request is the client's mistake (400), not a server error.
+  const documentsOk =
+    body.documents === undefined ||
+    (Array.isArray(body.documents) && body.documents.every((d) => typeof d?.id === "string" && UUID.test(d.id)));
+  if (typeof text !== "string" || !Array.isArray(images) || !documentsOk) return c.json({ error: "Invalid message" }, 400);
+  const requested = [...new Set((body.documents ?? []).map((d) => d.id.toLowerCase()))];
+  if (requested.length > MAX_DOCUMENTS) return c.json({ error: `At most ${MAX_DOCUMENTS} documents per message` }, 400);
+  // Names come from the library, not from the request: the model only ever sees real documents.
+  const documents = await readyDocuments(requested);
+  if (documents.length < requested.length) {
+    return c.json({ error: "An attached document isn't ready (still indexing, failed, or deleted)." }, 409);
+  }
+  const think = shouldThink(body.think === true, text) || documents.length > 0;
+  if (!text.trim() && images.length === 0 && documents.length === 0) return c.json({ error: "Empty message" }, 400);
   if (images.length > MAX_IMAGES) return c.json({ error: `At most ${MAX_IMAGES} images per message` }, 400);
   for (const image of images) {
     const valid = IMAGE_TYPES.includes(image.mime) && image.dataUrl.startsWith(`data:${image.mime};base64,`);
@@ -165,13 +205,30 @@ app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 
     variant: think ? undefined : FAST_VARIANT,
     parts: [
       ...(text.trim() ? [{ type: "text" as const, text }] : []),
+      // Attached documents: a hidden note for the model (the UI shows it as file chips).
+      ...(documents.length ? [attachedDocumentsPart(documents)] : []),
       // Images travel as file parts with a data: URL; OpenCode → gateway → Ollama → the vision model.
       ...images.map((image) => ({ type: "file" as const, mime: image.mime, filename: image.name, url: image.dataUrl })),
     ],
   }));
-  void reviewWhenDone(sessionID, text || "(image)", think); // check the reply once the agent finishes
+  void reviewWhenDone(sessionID, text || (documents.length ? "(documents)" : "(image)"), think); // check the reply once the agent finishes
   return c.body(null, 204);
 });
+
+// The note that tells the model which library documents came with a message. Synthetic
+// (not typed by the user); the metadata lets server/translate.ts show it as file chips.
+function attachedDocumentsPart(documents: AttachedDocument[]) {
+  // Names are quoted and escaped (JSON), so a file name can't close the note and add its own
+  // "instructions" (the library is shared: one user's upload could target another's chat).
+  const names = documents.map((d) => JSON.stringify(cleanName(d.name))).join(", ");
+  const one = documents.length === 1;
+  return {
+    type: "text" as const,
+    synthetic: true,
+    text: `[The user attached ${one ? "this document" : "these documents"} from their library: ${names}. Read or search ${one ? "it" : "them"} with the docs tools before answering.]`,
+    metadata: { seylDocuments: documents },
+  };
+}
 
 // A hidden follow-up for when the model ends its turn with the answer only in its
 // thoughts (a known failure of thinking models after tool calls). Marked synthetic,
@@ -192,9 +249,10 @@ async function reviewWhenDone(sessionID: string, prompt: string, think: boolean)
       if (status[sessionID] && status[sessionID].type !== "idle") continue;
 
       const messages = unwrap(await client.session.messages({ sessionID }));
-      // The reply = everything after the user's last REAL message (not our hidden nudge).
+      // The reply = everything after the user's last REAL message (not our hidden nudge —
+      // a message may also be images or documents only, so look for the nudge itself).
       const lastUser = messages.findLastIndex(
-        (m) => m.info.role === "user" && m.parts.some((p) => p.type === "text" && !p.synthetic),
+        (m) => m.info.role === "user" && !m.parts.some((p) => p.type === "text" && p.text === NUDGE),
       );
       const reply = messages.slice(lastUser + 1).filter((m) => m.info.role === "assistant");
       const last = messages.at(-1)?.info;
@@ -237,7 +295,14 @@ async function reviewWhenDone(sessionID: string, prompt: string, think: boolean)
 app.post("/api/conversations/:id/permissions/:requestID", async (c) => {
   const { reply } = await c.req.json<{ reply: PermissionReply }>();
   if (!["once", "always", "reject"].includes(reply)) return c.json({ error: "Invalid reply" }, 400);
-  check(await client.permission.reply({ requestID: c.req.param("requestID"), reply }));
+  // The harness knows nothing about users: make sure this request belongs to THIS conversation
+  // (which ownConversation already checked is the caller's).
+  const requestID = c.req.param("requestID");
+  const pending = unwrap(await client.permission.list({}));
+  if (!pending.some((p) => p.id === requestID && p.sessionID === c.req.param("id"))) {
+    return c.json({ error: "Approval request not found" }, 404);
+  }
+  check(await client.permission.reply({ requestID, reply }));
   return c.body(null, 204);
 });
 
@@ -287,8 +352,16 @@ async function migrateWithRetry() {
 }
 void migrateWithRetry();
 
-const server = serve({ fetch: app.fetch, port: PORT }, () => {
-  console.log(`seyl-ai backend running at http://localhost:${PORT}`);
+const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
+  console.log(`seyl-ai backend running at http://${HOST}:${PORT}`);
+});
+
+// MCP tool server for the agent (server/mcp.ts) — its own listener, reachable only inside
+// the cluster (Service port 3001), never through nginx.
+const mcpApp = new Hono();
+mcpApp.route("/mcp", mcp);
+const mcpServer = serve({ fetch: mcpApp.fetch, port: MCP_PORT, hostname: HOST }, () => {
+  console.log(`MCP tool server running at http://${HOST}:${MCP_PORT}/mcp`);
 });
 
 // Graceful shutdown: Docker/Kubernetes send SIGTERM before stopping a container.
@@ -296,6 +369,7 @@ const server = serve({ fetch: app.fetch, port: PORT }, () => {
 // browsers reconnect to another instance automatically).
 process.on("SIGTERM", () => {
   console.log("SIGTERM received, shutting down");
+  mcpServer.close();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 5_000).unref();
 });
