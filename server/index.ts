@@ -2,7 +2,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
-import type { ChatEvent, GuardFlags, ModelInfo } from "../shared/chat.js";
+import type { ChatEvent, GuardFlags, ImageAttachment, ModelInfo } from "../shared/chat.js";
 import { migrate } from "./db.js";
 import { addDocument, deleteDocument, fileType, listDocuments, MAX_UPLOAD_BYTES, SUPPORTED } from "./documents.js";
 import { reviewReply, screenPrompt } from "./guard.js";
@@ -87,13 +87,26 @@ app.get("/api/conversations/:id/messages", async (c) => {
   return c.json({ messages: messages.map(toChatMessage), busy, flags: guardFlags(session) });
 });
 
-// Send a message. The safety filter checks it first; if allowed, the agent starts and
-// this returns immediately — the reply arrives on the event stream.
-app.post("/api/conversations/:id/prompt", async (c) => {
-  const sessionID = c.req.param("id");
-  const { text } = await c.req.json<{ text: string }>();
+// Images: the browser resizes them first (fewer image tokens); these are hard limits.
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const MAX_IMAGES = 4;
+const MAX_IMAGE_CHARS = 6 * 1024 * 1024; // data URL length (~4.5 MB of image)
 
-  const screen = await screenPrompt(text);
+// Send a message (text and/or images). The safety filter checks the text first; if allowed,
+// the agent starts and this returns immediately — the reply arrives on the event stream.
+app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 }), async (c) => {
+  const sessionID = c.req.param("id");
+  const { text = "", images = [] } = await c.req.json<{ text?: string; images?: ImageAttachment[] }>();
+  if (!text.trim() && images.length === 0) return c.json({ error: "Empty message" }, 400);
+  if (images.length > MAX_IMAGES) return c.json({ error: `At most ${MAX_IMAGES} images per message` }, 400);
+  for (const image of images) {
+    const valid = IMAGE_TYPES.includes(image.mime) && image.dataUrl.startsWith(`data:${image.mime};base64,`);
+    if (!valid) return c.json({ error: `Unsupported image: ${image.name}` }, 415);
+    if (image.dataUrl.length > MAX_IMAGE_CHARS) return c.json({ error: `Image too large: ${image.name}` }, 413);
+  }
+
+  // Qwen3Guard reads text only: images themselves are NOT moderated (see README, Images).
+  const screen = text.trim() ? await screenPrompt(text) : { allowed: true as const };
   if (!screen.allowed) {
     const categories = screen.verdict?.categories ?? [];
     const why = categories.join(", ") || screen.verdict?.safety;
@@ -109,9 +122,13 @@ app.post("/api/conversations/:id/prompt", async (c) => {
     sessionID,
     agent: AGENT, // seyl-ai's own agent: system prompt + allowed tools (server/opencode.ts)
     model: MODEL,
-    parts: [{ type: "text", text }],
+    parts: [
+      ...(text.trim() ? [{ type: "text" as const, text }] : []),
+      // Images travel as file parts with a data: URL; OpenCode → gateway → Ollama → the vision model.
+      ...images.map((image) => ({ type: "file" as const, mime: image.mime, filename: image.name, url: image.dataUrl })),
+    ],
   }));
-  void reviewWhenDone(sessionID, text); // check the reply once the agent finishes
+  void reviewWhenDone(sessionID, text || "(image)"); // check the reply once the agent finishes
   return c.body(null, 204);
 });
 

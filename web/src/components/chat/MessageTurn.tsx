@@ -19,6 +19,12 @@ function Part({ part, isUser, streaming }: { part: ChatPart; isUser: boolean; st
       return <Reasoning text={part.text} thinking={streaming && !part.done} />;
     case "tool":
       return <ToolCall part={part} />;
+    case "image":
+      return (
+        <a href={part.url} target="_blank" rel="noreferrer" className="w-fit" title={part.name}>
+          <img src={part.url} alt={part.name ?? "Attached image"} className="max-h-60 max-w-full rounded-xl border border-border-light" />
+        </a>
+      );
   }
 }
 

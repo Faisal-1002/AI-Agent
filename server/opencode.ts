@@ -43,7 +43,7 @@ export const MODEL = { providerID: "gateway", modelID: MAIN_MODEL };
 // built-in coding prompt, and it may only use the read-only tools below.
 export const AGENT = "seyl";
 const SYSTEM_PROMPT = readFileSync(new URL("./prompts/seyl-ai.md", import.meta.url), "utf8");
-export const MODEL_INFO: ModelInfo = { provider: "LiteLLM", name: "Qwen3.5 9B" };
+export const MODEL_INFO: ModelInfo = { provider: "LiteLLM", name: "Qwen3.5 9B", vision: true };
 
 // OpenCode configuration, passed straight to the `opencode serve` process.
 // Same shape as an opencode.json file.

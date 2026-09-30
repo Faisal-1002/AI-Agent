@@ -85,7 +85,13 @@ export function App() {
           </div>
         )}
 
-        <ChatForm busy={chat.busy} canTranscribe={voice.asr} onSend={chat.send} onStop={chat.stop} />
+        <ChatForm
+          busy={chat.busy}
+          canTranscribe={voice.asr}
+          canAttachImages={model?.vision ?? false}
+          onSend={chat.send}
+          onStop={chat.stop}
+        />
         <p className="px-4 py-2 text-center text-xs text-text-tertiary">
           seyl-ai runs locally on your PC and can make mistakes.
         </p>

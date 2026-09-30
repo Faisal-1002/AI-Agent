@@ -18,6 +18,10 @@ export function toChatPart(part: Part): ChatPart | undefined {
       return part.synthetic ? undefined : { id: part.id, kind: "text", text: part.text };
     case "reasoning":
       return { id: part.id, kind: "reasoning", text: part.text, done: part.time.end !== undefined };
+    case "file":
+      return part.mime.startsWith("image/")
+        ? { id: part.id, kind: "image", mime: part.mime, url: part.url, name: part.filename }
+        : undefined;
     case "tool": {
       const { state } = part;
       return {

@@ -6,6 +6,7 @@ export type ToolStatus = "pending" | "running" | "completed" | "error";
 export type ChatPart =
   | { id: string; kind: "text"; text: string }
   | { id: string; kind: "reasoning"; text: string; done: boolean }
+  | { id: string; kind: "image"; mime: string; url: string; name?: string } // url: a data: URL
   | {
       id: string;
       kind: "tool";
@@ -29,7 +30,10 @@ export type ChatMessage = {
 
 export type Conversation = { id: string; title: string; updatedAt: number };
 
-export type ModelInfo = { provider: string; name: string };
+export type ModelInfo = { provider: string; name: string; vision: boolean };
+
+// An image attached to a message (already resized in the browser).
+export type ImageAttachment = { name: string; mime: string; dataUrl: string };
 
 // An uploaded document in the searchable library (server/documents.ts).
 export type DocumentInfo = {

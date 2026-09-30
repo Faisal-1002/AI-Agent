@@ -32,7 +32,7 @@ function upsertPart(parts: ChatPart[], part: ChatPart): ChatPart[] {
 function appendDelta(parts: ChatPart[], partID: string, delta: string): ChatPart[] {
   const existing = parts.find((p) => p.id === partID);
   if (!existing) return [...parts, { id: partID, kind: "text", text: delta }];
-  if (existing.kind === "tool") return parts;
+  if (existing.kind !== "text" && existing.kind !== "reasoning") return parts; // tools, images: no text deltas
   return parts.map((p) => (p === existing ? { ...existing, text: existing.text + delta } : p));
 }
 

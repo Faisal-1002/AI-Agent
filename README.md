@@ -202,6 +202,22 @@ Lessons learned:
   steps. Clearer tool descriptions help; it's a target for the optimization phase.
 - **Measure, don't guess**: every change above was checked with repeated runs, not one lucky answer.
 
+## Images
+
+Attach up to 4 images to a message — 📎 button, paste, or drag & drop — and ask about them. Qwen3.5 9B reads them.
+
+```
+image ──► browser: shrink to ≤ 1280 px, JPEG (web/src/lib/images.ts) ──► api ──► OpenCode file part (data: URL)
+      ──► gateway ──► Ollama ──► Qwen3.5 9B (vision)
+```
+
+- **Why shrink in the browser**: a vision model turns an image into tokens in proportion to its size. An 800×600
+  screenshot cost ~480 prompt tokens; a 12-megapixel phone photo would cost thousands — and seconds of processing —
+  for detail the model doesn't need. A 2400×1600 test image went up as a 25 KB, 1280×853 JPEG.
+- The api validates type, count and size; images are stored with the conversation and shown in your message.
+- **Limitation**: Qwen3Guard reads text only — images themselves are *not* moderated. The message text still is.
+- Tested: a canvas with a red circle, a blue square and the text "seyl-ai 42" → described exactly.
+
 ## Voice
 
 ```
@@ -376,6 +392,7 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `web/src/components/input/` | `ChatForm`, `ComposerButton`, `MicButton` (🎤) |
 | `web/src/components/chat/SpeakButton.tsx` | 🔊 read aloud, via the shared player in `web/src/lib/speaker.ts` |
 | `web/src/components/documents/DocumentsPanel.tsx` | Document library: upload (drag & drop), indexing status, delete |
+| `web/src/lib/images.ts` | Shrinks and re-encodes attached images in the browser before upload |
 | `ollama/*.Modelfile` | Model variants: Qwen3.5 9B (32k context), Qwen3.5 0.8B (CPU); the old Qwen3 8B for reference |
 | `workspace/` | The only folder the agent can see |
 
@@ -388,7 +405,7 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `POST /api/conversations` | Create one |
 | `DELETE /api/conversations/:id` | Delete one |
 | `GET /api/conversations/:id/messages` | History + whether the agent is still working |
-| `POST /api/conversations/:id/prompt` | Send a message (reply arrives on the event stream) |
+| `POST /api/conversations/:id/prompt` | Send a message: `{ text, images? }` (reply arrives on the event stream) |
 | `POST /api/conversations/:id/abort` | Stop the agent |
 | `GET /api/conversations/:id/events` | Live updates (Server-Sent Events) |
 | `GET /api/voice/status` | Which voice services are up (`{ asr, tts }`) |
