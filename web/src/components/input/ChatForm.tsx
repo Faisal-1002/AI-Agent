@@ -6,7 +6,7 @@ import { MicButton } from "./MicButton";
 type Props = {
   busy: boolean;
   canTranscribe: boolean; // speech-to-text service is up → show the 🎤 button
-  onSend: (text: string) => void;
+  onSend: (text: string) => Promise<boolean>; // false = refused (e.g. by the safety filter)
   onStop: () => void;
 };
 
@@ -25,8 +25,10 @@ export function ChatForm({ busy, canTranscribe, onSend, onStop }: Props) {
 
   const submit = () => {
     if (!canSend) return;
-    onSend(text.trim());
+    const sent = text.trim();
     setText("");
+    // If the message was refused, give the text back so it isn't lost.
+    onSend(sent).then((ok) => !ok && setText((current) => current || sent));
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {

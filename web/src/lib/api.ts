@@ -1,4 +1,4 @@
-import type { ChatMessage, Conversation, ModelInfo, VoiceStatus } from "../../../shared/chat";
+import type { ChatMessage, Conversation, GuardFlags, ModelInfo, VoiceStatus } from "../../../shared/chat";
 
 // Typed wrappers around the seyl-ai backend (server/index.ts).
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -16,7 +16,7 @@ export const api = {
   createConversation: () => request<Conversation>("/conversations", { method: "POST" }),
   deleteConversation: (id: string) => request<void>(`/conversations/${id}`, { method: "DELETE" }),
   messages: (id: string) =>
-    request<{ messages: ChatMessage[]; busy: boolean }>(`/conversations/${id}/messages`),
+    request<{ messages: ChatMessage[]; busy: boolean; flags: GuardFlags }>(`/conversations/${id}/messages`),
   prompt: (id: string, text: string) =>
     request<void>(`/conversations/${id}/prompt`, {
       method: "POST",

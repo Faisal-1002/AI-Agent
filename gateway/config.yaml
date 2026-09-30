@@ -25,6 +25,15 @@ model_list:
     model_info:
       mode: chat
 
+  # Safety classifier — Qwen3Guard on Ollama (CPU). Called by the backend, never by the agent.
+  - model_name: qwen3-guard
+    litellm_params:
+      model: openai/seyl-qwen3guard-0.6b
+      api_base: os.environ/OLLAMA_API_BASE
+      api_key: ollama
+    model_info:
+      mode: chat
+
   # Speech-to-text — our voice/asr service (OpenAI /v1/audio/transcriptions).
   - model_name: qwen3-asr
     litellm_params:

@@ -1,7 +1,12 @@
 import type { AssistantMessage, Event, Message, Part, Session } from "@opencode-ai/sdk/v2";
-import type { ChatEvent, ChatMessage, ChatPart, Conversation } from "../shared/chat.js";
+import type { ChatEvent, ChatMessage, ChatPart, Conversation, GuardFlags } from "../shared/chat.js";
 
 // Translation layer: OpenCode's rich data model → the small model our UI understands.
+
+// Safety-filter flags are stored in the session's metadata (see server/index.ts).
+export function guardFlags(session: Session): GuardFlags {
+  return (session.metadata?.guard as GuardFlags | undefined) ?? {};
+}
 
 export function toConversation(session: Session): Conversation {
   return { id: session.id, title: session.title, updatedAt: session.time.updated };
@@ -86,7 +91,7 @@ export function toChatEvent(event: Event): ChatEvent | undefined {
     case "session.idle":
       return { type: "status", busy: false };
     case "session.updated":
-      return { type: "title", title: event.properties.info.title };
+      return { type: "session", title: event.properties.info.title, flags: guardFlags(event.properties.info) };
     case "session.error": {
       const message = errorText(event.properties.error);
       return message ? { type: "error", message } : { type: "status", busy: false };

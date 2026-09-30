@@ -1,0 +1,24 @@
+# Qwen3Guard-Gen 0.6B — the safety classifier (used by server/guard.ts through the gateway).
+#
+# Weights: a GGUF conversion of the official Apache-2.0 model (Qwen/Qwen3Guard-Gen-0.6B) by
+# mradermacher on Hugging Face. Not the "heretic" variants — those have safety removed.
+#
+# TEMPLATE: the official chat template is Jinja code that wraps the text in the safety policy;
+# Ollama can't run Jinja (it copies it verbatim, which renders as gibberish). So the backend
+# renders the policy text itself (server/guard-template.json) and this template only adds the
+# chat markers, reproducing the official format exactly — including the empty <think> block.
+#
+# Create with: ollama create seyl-qwen3guard-0.6b -f ollama/qwen3guard-0.6b.Modelfile
+FROM hf.co/mradermacher/Qwen3Guard-Gen-0.6B-GGUF:Q8_0
+TEMPLATE """<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+<think>
+
+</think>
+
+"""
+PARAMETER stop <|im_end|>
+PARAMETER temperature 0
+PARAMETER num_ctx 8192
+PARAMETER num_gpu 0

@@ -1,14 +1,14 @@
 import { useMemo } from "react";
-import type { ChatMessage } from "../../../../shared/chat";
+import type { ChatMessage, GuardFlags } from "../../../../shared/chat";
 import { groupTurns, type Turn } from "../../lib/conversations";
 import { useStickToBottom } from "../../hooks/useStickToBottom";
 import { MessageTurn } from "./MessageTurn";
 
-type Props = { messages: ChatMessage[]; busy: boolean; canSpeak: boolean };
+type Props = { messages: ChatMessage[]; busy: boolean; canSpeak: boolean; flags: GuardFlags };
 
 const PENDING: Turn = { id: "pending", role: "assistant", messages: [] };
 
-export function MessageList({ messages, busy, canSpeak }: Props) {
+export function MessageList({ messages, busy, canSpeak, flags }: Props) {
   const turns = useMemo(() => groupTurns(messages), [messages]);
   const scrollRef = useStickToBottom<HTMLDivElement>(messages);
 
@@ -25,6 +25,7 @@ export function MessageList({ messages, busy, canSpeak }: Props) {
             turn={turn}
             streaming={busy && turn === last && turn.role === "assistant"}
             canSpeak={canSpeak}
+            flag={flags[turn.id]}
           />
         ))}
         {waiting && <MessageTurn turn={PENDING} streaming canSpeak={false} />}

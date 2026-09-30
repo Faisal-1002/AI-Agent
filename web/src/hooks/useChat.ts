@@ -32,7 +32,7 @@ export function useChat(conversationId: string | undefined, handlers: Handlers) 
           clearTimeout(timeout);
           resolve();
         }
-        if (event.type === "title") handlersRef.current.onTitle(id, event.title);
+        if (event.type === "session") handlersRef.current.onTitle(id, event.title);
         dispatch(event);
       };
     });
@@ -43,17 +43,17 @@ export function useChat(conversationId: string | undefined, handlers: Handlers) 
     if (!conversationId) {
       stream.current?.source.close();
       stream.current = null;
-      dispatch({ type: "reset", messages: [], busy: false });
+      dispatch({ type: "reset", messages: [], busy: false, flags: {} });
       return;
     }
     // send() just created this conversation and is already streaming it.
     if (stream.current?.id === conversationId && stream.current.openedBySend) return;
 
     let cancelled = false;
-    dispatch({ type: "reset", messages: [], busy: false });
+    dispatch({ type: "reset", messages: [], busy: false, flags: {} });
     api
       .messages(conversationId)
-      .then(({ messages, busy }) => !cancelled && dispatch({ type: "reset", messages, busy }))
+      .then(({ messages, busy, flags }) => !cancelled && dispatch({ type: "reset", messages, busy, flags }))
       .catch((err: Error) => !cancelled && dispatch({ type: "failed", message: err.message }));
     connect(conversationId, false).catch(() => {});
     return () => {
@@ -65,7 +65,7 @@ export function useChat(conversationId: string | undefined, handlers: Handlers) 
   useEffect(() => () => stream.current?.source.close(), []);
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string): Promise<boolean> => {
       dispatch({ type: "sending" });
       try {
         let id = conversationId;
@@ -77,8 +77,10 @@ export function useChat(conversationId: string | undefined, handlers: Handlers) 
           handlersRef.current.onCreated(conversation);
         }
         await api.prompt(id, text);
+        return true;
       } catch (err) {
         dispatch({ type: "failed", message: (err as Error).message });
+        return false;
       }
     },
     [conversationId, connect],

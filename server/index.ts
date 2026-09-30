@@ -1,9 +1,10 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import type { ChatEvent, ModelInfo } from "../shared/chat.js";
-import { client, MODEL, MODEL_INFO } from "./opencode.js";
-import { sessionOf, toChatEvent, toChatMessage, toConversation } from "./translate.js";
+import type { ChatEvent, GuardFlags, ModelInfo } from "../shared/chat.js";
+import { reviewReply, screenPrompt } from "./guard.js";
+import { AGENT, client, MODEL, MODEL_INFO } from "./opencode.js";
+import { guardFlags, sessionOf, toChatEvent, toChatMessage, toConversation } from "./translate.js";
 import { voice } from "./voice.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -55,27 +56,81 @@ app.delete("/api/conversations/:id", async (c) => {
   return c.body(null, 204);
 });
 
-// Full history, plus whether the agent is still working on it.
+// Full history, whether the agent is still working on it, and safety-filter flags.
 app.get("/api/conversations/:id/messages", async (c) => {
   const sessionID = c.req.param("id");
-  const [messages, status] = await Promise.all([
+  const [messages, status, session] = await Promise.all([
     client.session.messages({ sessionID }).then(unwrap),
     client.session.status({}).then(unwrap),
+    client.session.get({ sessionID }).then(unwrap),
   ]);
   const busy = status[sessionID] !== undefined && status[sessionID].type !== "idle";
-  return c.json({ messages: messages.map(toChatMessage), busy });
+  return c.json({ messages: messages.map(toChatMessage), busy, flags: guardFlags(session) });
 });
 
-// Send a message. Returns immediately; the reply arrives on the event stream.
+// Send a message. The safety filter checks it first; if allowed, the agent starts and
+// this returns immediately — the reply arrives on the event stream.
 app.post("/api/conversations/:id/prompt", async (c) => {
+  const sessionID = c.req.param("id");
   const { text } = await c.req.json<{ text: string }>();
+
+  const screen = await screenPrompt(text);
+  if (!screen.allowed) {
+    const categories = screen.verdict?.categories ?? [];
+    const why = categories.join(", ") || screen.verdict?.safety;
+    const error =
+      screen.reason ??
+      (categories.includes("Suicide & Self-Harm")
+        ? "It sounds like you might be going through something really hard. You don't have to face it alone — please consider reaching out to someone you trust, or to a local crisis line or emergency service right now."
+        : `seyl-ai can't help with that — the safety filter flagged it (${why}).`);
+    return c.json({ error, blocked: screen.verdict }, 422);
+  }
+
   check(await client.session.promptAsync({
-    sessionID: c.req.param("id"),
+    sessionID,
+    agent: AGENT, // seyl-ai's own agent: system prompt + allowed tools (server/opencode.ts)
     model: MODEL,
     parts: [{ type: "text", text }],
   }));
+  void reviewWhenDone(sessionID, text); // check the reply once the agent finishes
   return c.body(null, 204);
 });
+
+// After the agent finishes, run the safety filter on its reply and store any flag in
+// the session's metadata (the UI shows it; it survives reloads).
+// Note: this runs in the api pod that received the prompt; if that pod stops first,
+// the check is skipped. A production system would hand this to a queue/worker.
+async function reviewWhenDone(sessionID: string, prompt: string) {
+  try {
+    const deadline = Date.now() + 15 * 60_000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const status = unwrap(await client.session.status({}));
+      if (status[sessionID] && status[sessionID].type !== "idle") continue;
+
+      const messages = unwrap(await client.session.messages({ sessionID }));
+      const lastUser = messages.findLastIndex((m) => m.info.role === "user");
+      const reply = messages.slice(lastUser + 1);
+      const last = reply.at(-1)?.info;
+      const done = last?.role === "assistant" && last.time.completed !== undefined;
+      if (!done) continue; // not started yet, or still running
+
+      const text = reply
+        .flatMap((m) => m.parts)
+        .flatMap((p) => (p.type === "text" && !p.synthetic ? [p.text] : []))
+        .join("\n\n");
+      const verdict = await reviewReply(prompt, text);
+      if (!verdict) return;
+
+      const session = unwrap(await client.session.get({ sessionID }));
+      const guard: GuardFlags = { ...guardFlags(session), [reply[0].info.id]: verdict };
+      check(await client.session.update({ sessionID, metadata: { ...session.metadata, guard } }));
+      return;
+    }
+  } catch (err) {
+    console.error("[guard] reply review failed:", (err as Error).message);
+  }
+}
 
 // Stop the agent mid-reply.
 app.post("/api/conversations/:id/abort", async (c) => {

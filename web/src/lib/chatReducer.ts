@@ -1,14 +1,15 @@
-import type { ChatEvent, ChatMessage, ChatPart } from "../../../shared/chat";
+import type { ChatEvent, ChatMessage, ChatPart, GuardFlags } from "../../../shared/chat";
 
-export type ChatState = { messages: ChatMessage[]; busy: boolean; error?: string };
+// flags: replies the safety filter flagged (keyed by turn id).
+export type ChatState = { messages: ChatMessage[]; busy: boolean; flags: GuardFlags; error?: string };
 
 export type ChatAction =
   | ChatEvent
-  | { type: "reset"; messages: ChatMessage[]; busy: boolean }
+  | { type: "reset"; messages: ChatMessage[]; busy: boolean; flags: GuardFlags }
   | { type: "sending" }
   | { type: "failed"; message: string };
 
-export const initialChat: ChatState = { messages: [], busy: false };
+export const initialChat: ChatState = { messages: [], busy: false, flags: {} };
 
 // Apply a change to one message, creating it if this is the first we hear of it.
 function updateMessage(
@@ -39,7 +40,7 @@ function appendDelta(parts: ChatPart[], partID: string, delta: string): ChatPart
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "reset":
-      return { messages: action.messages, busy: action.busy };
+      return { messages: action.messages, busy: action.busy, flags: action.flags };
     case "sending":
       return { ...state, busy: true, error: undefined };
     case "failed":
@@ -73,8 +74,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
           parts: appendDelta(m.parts, action.partID, action.delta),
         })),
       };
+    case "session":
+      return { ...state, flags: action.flags };
     case "ready":
-    case "title":
       return state;
   }
 }

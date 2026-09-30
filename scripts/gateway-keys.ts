@@ -25,10 +25,10 @@ const KEYS = [
   },
   {
     key: required("LITELLM_KEY_API"),
-    key_alias: "api-voice",
-    models: ["qwen3-asr", "qwen3-tts"],
-    rpm_limit: 60, // a runaway client can't flood the CPU-bound voice models
-    metadata: { purpose: "Speech-to-text and read-aloud from the seyl-ai API" },
+    key_alias: "api",
+    models: ["qwen3-asr", "qwen3-tts", "qwen3-guard"],
+    rpm_limit: 120, // a runaway client can't flood the CPU-bound models
+    metadata: { purpose: "Voice and the safety filter, called by the seyl-ai API" },
   },
 ];
 

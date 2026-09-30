@@ -12,7 +12,8 @@
     "dev:web": "vite",
     "typecheck": "tsc",
     "build": "vite build",
-    "gateway:keys": "tsx scripts/gateway-keys.ts"
+    "gateway:keys": "tsx scripts/gateway-keys.ts",
+    "guard:eval": "tsx scripts/guard-eval.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",

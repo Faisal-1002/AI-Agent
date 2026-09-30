@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { createOpencodeClient, type Config } from "@opencode-ai/sdk/v2";
 import type { ModelInfo } from "../shared/chat.js";
@@ -33,6 +34,11 @@ const MAIN_MODEL = "qwen3.5-9b"; // chat, agent loop, tools, images
 const SMALL_MODEL = "qwen3.5-0.8b"; // quick jobs such as chat titles
 
 export const MODEL = { providerID: "gateway", modelID: MAIN_MODEL };
+
+// seyl-ai's own agent: its system prompt (server/prompts/seyl-ai.md) replaces OpenCode's
+// built-in coding prompt, and it may only use the read-only tools below.
+export const AGENT = "seyl";
+const SYSTEM_PROMPT = readFileSync(new URL("./prompts/seyl-ai.md", import.meta.url), "utf8");
 export const MODEL_INFO: ModelInfo = { provider: "LiteLLM", name: "Qwen3.5 9B" };
 
 // OpenCode configuration, passed straight to the `opencode serve` process.
@@ -67,6 +73,31 @@ export const config: Config = {
           options: { reasoningEffort: "none" },
         },
       },
+    },
+  },
+  agent: {
+    [AGENT]: {
+      mode: "primary",
+      description: "seyl-ai: a local assistant that finds, searches and reads workspace files",
+      prompt: SYSTEM_PROMPT,
+      // Allow-list: only these tools are offered to the model. Every tool definition is sent
+      // with every request, so fewer tools also means fewer tokens (and a faster first answer).
+      tools: {
+        read: true,
+        glob: true,
+        grep: true,
+        bash: false,
+        edit: false,
+        write: false,
+        apply_patch: false,
+        webfetch: false,
+        websearch: false,
+        task: false, // sub-agents
+        todowrite: false,
+        skill: false,
+        question: false, // would pause for an answer the UI can't give yet
+      },
+      steps: 12, // at most 12 model calls per message: stops runaway agent loops
     },
   },
   // v1 is read-only: the agent may read and search files, but not change

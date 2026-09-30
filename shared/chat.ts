@@ -34,6 +34,18 @@ export type ModelInfo = { provider: string; name: string };
 // Which voice services are reachable (speech-to-text, text-to-speech).
 export type VoiceStatus = { asr: boolean; tts: boolean };
 
+// The safety filter's (Qwen3Guard) judgement of a message or reply.
+export type GuardVerdict = {
+  safety: "Safe" | "Controversial" | "Unsafe";
+  categories: string[]; // e.g. ["Violent"]; empty when Safe
+  refusal?: boolean; // replies only: did the assistant decline?
+  source?: "model" | "rules"; // who flagged it: Qwen3Guard, or the pattern rules (server/pii.ts)
+};
+
+// Replies the safety filter flagged, keyed by the id of the reply's first message
+// (the same id the UI uses for that turn). Stored in the OpenCode session's metadata.
+export type GuardFlags = Record<string, GuardVerdict>;
+
 // Live updates streamed to the UI over Server-Sent Events.
 export type ChatEvent =
   | { type: "ready" }
@@ -41,5 +53,5 @@ export type ChatEvent =
   | { type: "part"; messageID: string; part: ChatPart }
   | { type: "delta"; messageID: string; partID: string; delta: string }
   | { type: "status"; busy: boolean }
-  | { type: "title"; title: string }
+  | { type: "session"; title: string; flags: GuardFlags }
   | { type: "error"; message: string };

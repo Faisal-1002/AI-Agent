@@ -8,16 +8,18 @@ My own AI agent — a local web app built on the [OpenCode](https://github.com/a
 Browser (React)               localhost:5173   web/          chat UI
    │  HTTP + Server-Sent Events
    ▼
-seyl-ai backend (Hono)        localhost:3000   server/       my code: sessions, prompts, event translation
-   │  @opencode-ai/sdk
+seyl-ai backend (Hono)        localhost:3000   server/       my code: sessions, prompts, safety filter, events
+   │  @opencode-ai/sdk              (checks every message with Qwen3Guard first — see Safety)
    ▼
 OpenCode harness              localhost:4097   server/harness.ts   agent loop, tools, permissions
-   │  OpenAI-compatible API, key "harness"     (the backend's voice routes use key "api-voice")
+   │  agent "seyl": own system prompt + 3 read-only tools
+   │  OpenAI-compatible API, key "harness"     (the backend's guard and voice use key "api")
    ▼
 LiteLLM gateway               localhost:4000   gateway/      one front door to every model
    │
    ├─▶ Ollama (host)  ─▶ Qwen3.5 9B   (GPU, 32k context)   main model: agent loop, tools, images
-   │                  └▶ Qwen3.5 0.8B (CPU, no thinking)   small model: chat titles
+   │                  ├▶ Qwen3.5 0.8B (CPU, no thinking)   small model: chat titles
+   │                  └▶ Qwen3Guard 0.6B (CPU)             safety classifier
    ├─▶ voice/asr      ─▶ Qwen3-ASR 0.6B (CPU)              speech-to-text
    └─▶ voice/tts      ─▶ Qwen3-TTS 0.6B (CPU)              text-to-speech
 ```
@@ -25,7 +27,7 @@ LiteLLM gateway               localhost:4000   gateway/      one front door to e
 - **Models** — Qwen3.5 9B is the "brain"; Qwen3.5 0.8B handles quick jobs (OpenCode's `small_model`); Qwen3-ASR/TTS are the voice. Just weights; they can't run on their own.
 - **Ollama** — the runtime that loads the chat weights onto the GPU and serves them over HTTP.
 - **LiteLLM** — the model gateway: one OpenAI-compatible API, per-consumer keys, usage logs (see [Gateway](#gateway)).
-- **OpenCode** — the harness: runs the agent loop (model → tool call → result → model …), provides tools (read, grep, glob, …), and enforces permissions.
+- **OpenCode** — the harness: runs the agent loop (model → tool call → result → model …), provides tools (read, grep, glob, …), and enforces permissions. seyl-ai runs its own agent on it ([Safety](#safety)).
 - **Backend** — conversations (= OpenCode sessions), prompts, stop, history, and a live event stream; translates OpenCode's data into a small model the UI understands (`server/translate.ts`, types in `shared/chat.ts`).
 - **Web UI** — a chat app in the style of LibreChat: conversation sidebar, streamed markdown replies, collapsible "Thoughts" and tool calls (with their input and output), stop button, light/dark theme.
 
@@ -46,6 +48,8 @@ ollama pull qwen3.5:9b
 ollama pull qwen3.5:0.8b
 ollama create seyl-qwen3.5-9b -f ollama/qwen3.5-9b.Modelfile
 ollama create seyl-qwen3.5-0.8b -f ollama/qwen3.5-0.8b.Modelfile
+ollama pull hf.co/mradermacher/Qwen3Guard-Gen-0.6B-GGUF:Q8_0
+ollama create seyl-qwen3guard-0.6b -f ollama/qwen3guard-0.6b.Modelfile
 ```
 
 Secrets: copy `.env.example` to `.env` and fill in long random values. `.env` is git-ignored; nothing
@@ -57,6 +61,7 @@ secret is committed.
 |---|---|---|---|
 | `seyl-qwen3.5-9b` | GPU, 6.5 GB incl. 32k context | ~79 tokens/s | Agent loop, tools, thinking, images. Hybrid attention keeps long context cheap. |
 | `seyl-qwen3.5-0.8b` | CPU (`num_gpu 0`) | title in ~3 s | Titles. Thinking disabled with `reasoningEffort: "none"`. |
+| `seyl-qwen3guard-0.6b` | CPU (`num_gpu 0`) | ~0.5 s per check | Safety classifier ([Safety](#safety)). GGUF conversion of the official Apache-2.0 model. |
 
 Lesson learned: with both models on a 10 GB GPU (plus the Windows desktop), VRAM overflowed and Windows
 spilled it into system RAM — generation dropped from ~46 to ~1 token/s. Keep the GPU for one model and put
@@ -84,7 +89,7 @@ Moving a model (say, Ollama → Amazon Bedrock) is a change to that one file.
 | Key (from `.env`) | Alias | May use | Used by |
 |---|---|---|---|
 | `LITELLM_KEY_HARNESS` | `harness` | `qwen3.5-9b`, `qwen3.5-0.8b` | the OpenCode harness |
-| `LITELLM_KEY_API` | `api-voice` | `qwen3-asr`, `qwen3-tts` (60 requests/min) | the backend's voice routes |
+| `LITELLM_KEY_API` | `api` | `qwen3-guard`, `qwen3-asr`, `qwen3-tts` (120 requests/min) | the backend's safety filter and voice routes |
 | `LITELLM_MASTER_KEY` | admin | everything | only `scripts/gateway-keys.ts` and the admin UI |
 
 - **Least privilege**: the harness key calling a voice model → `403`; the voice key calling chat → `403`; no key → `401`.
@@ -97,6 +102,59 @@ Moving a model (say, Ollama → Amazon Bedrock) is a change to that one file.
 - The config is **baked into the gateway image** (`gateway/Dockerfile`), secrets are not — they arrive as
   environment variables. (Also a workaround: Docker Desktop can't bind-mount files from this app's
   virtualized folder.)
+
+## Safety
+
+Two layers with different jobs:
+
+| | **System prompt** (`server/prompts/seyl-ai.md`) | **Safety filter** (`server/guard.ts`) |
+|---|---|---|
+| What | Tells the agent who it is and how to behave | Checks every message and every reply |
+| Where | Inside the model's context | In our backend, *outside* the model |
+| Can a user talk their way past it? | Yes — it's a request, not a rule | No — the check runs before the agent sees anything |
+
+**The agent** — seyl-ai runs its own OpenCode agent (`agent: "seyl"` in `server/opencode.ts`): its system prompt
+replaces OpenCode's built-in coding prompt, only `read`, `glob` and `grep` are offered (an allow-list), and a
+message may take at most 12 model calls. Measured in the gateway logs: **5,301 → 1,566 prompt tokens per agent
+step (−70%)** — every step re-sends the system prompt and tool definitions.
+
+**The safety filter** — [Qwen3Guard-Gen 0.6B](https://huggingface.co/Qwen/Qwen3Guard-Gen-0.6B) labels text *Safe /
+Controversial / Unsafe* with categories (Violent, PII, Jailbreak, …). ~0.5 s per check on the CPU.
+
+```
+message ──► guard ──(block)──► "seyl-ai can't help with that (Violent)" — the agent never sees it
+                └──(allow)──► agent answers ──► guard + PII rules review the reply ──► flag shown on the reply
+```
+
+- **Policy** (`decide()`): block *Unsafe*, and anything tagged *Jailbreak*; `GUARD_STRICT=true` also blocks
+  *Controversial*. The model labels; our code decides.
+- **Replies** are reviewed after they finish; flags are stored in the OpenCode session's metadata, so they survive reloads.
+- **Fail closed**: if the guard is down, messages are refused rather than let through unchecked.
+- **Self-harm** gets a caring message pointing to people who can help, not a generic "blocked".
+- `GUARD_MODE=monitor` checks and flags but never blocks (for tuning); `off` disables checks.
+
+**Evaluate it**: `npm run guard:eval` runs 18 labeled cases (everyday, Arabic, borderline, harmful, jailbreak,
+replies) through the real pipeline and checks each *decision* — 18/18 today. Re-run it after changing the model,
+its quantization, the template or the policy.
+
+Lessons learned:
+
+- **Chat templates are part of the model.** Qwen3Guard's whole safety policy lives in its Jinja chat template.
+  Ollama can't run Jinja — it copied the code verbatim, which the model would have seen as gibberish. So the
+  backend renders the official policy text (`server/guard-template.json`, extracted by `scripts/guard-template.ts`)
+  and the Modelfile's template only adds the chat markers.
+- **Labels ≠ decisions.** The guard rated a jailbreak only *Controversial* (while tagging it *Jailbreak*), so
+  "block Unsafe" let it through. The policy now looks at categories too.
+- **Defense in depth.** The guard flagged a bare "name, address, SSN" row, but rated the *same data* Safe inside a
+  longer explanation. Deterministic rules (`server/pii.ts`: SSN format, Luhn-valid card numbers) catch those.
+- **Trade-offs are real.** A request to *make up* a fictional customer record (for a database test) was blocked
+  as PII — a false positive. Strictness costs some legitimate uses.
+- **Small models are inconsistent**: the 0.6B guard sometimes omits its optional "Refusal:" line; refusal is
+  informational only, so nothing depends on it.
+- **Don't blindly trust a model file.** The guard weights are a community GGUF conversion (not the "heretic"
+  variants, which have safety removed) — hence the evaluation set.
+
+`workspace/customers.csv` holds obviously fake personal data for testing the reply check.
 
 ## Voice
 
@@ -232,6 +290,8 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `SEYL_WORKSPACE` | `./workspace` | folder the agent works in (path inside the harness) |
 | `TTS_VOICE` | `Aiden` | api: voice used for read-aloud |
 | `TORCH_THREADS` | `8` (asr) / `4` (tts) | voice services: CPU threads |
+| `GUARD_MODE` | `enforce` | api: `enforce` / `monitor` / `off` ([Safety](#safety)) |
+| `GUARD_STRICT` | `false` | api: also block *Controversial* messages |
 
 ## Project layout
 
@@ -247,6 +307,10 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `voice/asr/`, `voice/tts/` | The voice services (Python + Dockerfile each) |
 | `gateway/` | LiteLLM config (model list) + Dockerfile |
 | `scripts/gateway-keys.ts` | Registers the per-consumer gateway keys (`npm run gateway:keys`) |
+| `server/guard.ts`, `server/pii.ts` | Safety filter: Qwen3Guard checks + policy, and the personal-data pattern rules |
+| `server/guard-template.json` | Qwen3Guard's official moderation prompt (from `scripts/guard-template.ts`) |
+| `server/prompts/seyl-ai.md` | The agent's system prompt |
+| `scripts/guard-eval.ts` | Safety filter evaluation (`npm run guard:eval`) |
 | `web/src/App.tsx` | Page layout: sidebar + chat |
 | `web/src/hooks/` | `useChat` (history, live events, send, stop), `useConversations`, … |
 | `web/src/lib/` | API client, chat reducer, date grouping — plain functions, no React |

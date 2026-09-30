@@ -1,14 +1,15 @@
 import { memo } from "react";
-import type { ChatPart } from "../../../../shared/chat";
+import type { ChatPart, GuardVerdict } from "../../../../shared/chat";
 import type { Turn } from "../../lib/conversations";
 import { Avatar } from "../ui/Avatar";
 import { CopyButton } from "../ui/CopyButton";
 import { Markdown } from "../ui/Markdown";
 import { Reasoning } from "./parts/Reasoning";
 import { ToolCall } from "./parts/ToolCall";
+import { GuardNotice } from "./GuardNotice";
 import { SpeakButton } from "./SpeakButton";
 
-type Props = { turn: Turn; streaming: boolean; canSpeak: boolean };
+type Props = { turn: Turn; streaming: boolean; canSpeak: boolean; flag?: GuardVerdict };
 
 function Part({ part, isUser, streaming }: { part: ChatPart; isUser: boolean; streaming: boolean }) {
   switch (part.kind) {
@@ -22,7 +23,7 @@ function Part({ part, isUser, streaming }: { part: ChatPart; isUser: boolean; st
 }
 
 // One row in the chat: avatar + name, then everything said in that turn.
-export const MessageTurn = memo(function MessageTurn({ turn, streaming, canSpeak }: Props) {
+export const MessageTurn = memo(function MessageTurn({ turn, streaming, canSpeak, flag }: Props) {
   const isUser = turn.role === "user";
   const parts = turn.messages.flatMap((m) => m.parts);
   const errors = turn.messages.map((m) => m.error).filter(Boolean);
@@ -38,6 +39,7 @@ export const MessageTurn = memo(function MessageTurn({ turn, streaming, canSpeak
         <div className="select-none pt-0.5 text-sm font-semibold">{isUser ? "You" : "seyl-ai"}</div>
 
         <div className="flex flex-col gap-2 text-text-primary">
+          {flag && <GuardNotice verdict={flag} />}
           {parts.map((part) => (
             <Part key={part.id} part={part} isUser={isUser} streaming={streaming} />
           ))}
