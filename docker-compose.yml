@@ -16,6 +16,7 @@ services:
       SEYL_MCP_TOKEN: ${SEYL_MCP_TOKEN}
     volumes:
       - opencode-data:/data # sessions survive restarts
+      - workspace:/workspace # files the agent may edit (Docker seeds it from the image the first time)
     depends_on: [litellm]
     # Not published to the PC: only other containers can talk to the harness.
 
@@ -92,6 +93,7 @@ services:
 
 volumes:
   opencode-data:
+  workspace:
   gateway-db:
   asr-models:
   tts-models:

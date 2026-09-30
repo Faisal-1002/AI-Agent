@@ -62,6 +62,15 @@ export type GuardVerdict = {
 // (the same id the UI uses for that turn). Stored in the OpenCode session's metadata.
 export type GuardFlags = Record<string, GuardVerdict>;
 
+// The agent is paused, asking the user to approve an action (e.g. editing a file).
+export type PermissionAsk = {
+  id: string;
+  action: string; // "edit" = create or change a file
+  files: string[]; // what it wants to touch
+  diff?: string; // the proposed change, when available
+};
+export type PermissionReply = "once" | "always" | "reject";
+
 // Live updates streamed to the UI over Server-Sent Events.
 export type ChatEvent =
   | { type: "ready" }
@@ -70,4 +79,6 @@ export type ChatEvent =
   | { type: "delta"; messageID: string; partID: string; delta: string }
   | { type: "status"; busy: boolean }
   | { type: "session"; title: string; flags: GuardFlags }
+  | { type: "permission"; ask: PermissionAsk }
+  | { type: "permission-done"; id: string; reply: PermissionReply }
   | { type: "error"; message: string };

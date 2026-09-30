@@ -84,23 +84,27 @@ export const config: Config = {
       mode: "primary",
       description: "seyl-ai: a local assistant that finds, searches and reads workspace files",
       prompt: SYSTEM_PROMPT,
-      // Allow-list: only these tools are offered to the model. Every tool definition is sent
-      // with every request, so fewer tools also means fewer tokens (and a faster first answer).
-      tools: {
-        read: true,
-        glob: true,
-        grep: true,
-        "docs_*": true, // document tools from our MCP server (search, list, read)
-        bash: false,
-        edit: false,
-        write: false,
-        apply_patch: false,
-        webfetch: false,
-        websearch: false,
-        task: false, // sub-agents
-        todowrite: false,
-        skill: false,
-        question: false, // would pause for an answer the UI can't give yet
+      // What this agent may do: "allow" (on its own), "ask" (pauses; the UI shows Allow / Deny)
+      // or "deny" (the tool isn't even offered — fewer tool definitions = fewer tokens).
+      //
+      // Written as permissions on purpose. The older `tools: { edit: true }` form looks like
+      // "make edit available" but OpenCode turns it into `edit: "allow"` — silently overriding
+      // the global "ask". server/harness.ts verifies the effective rules at startup.
+      permission: {
+        read: "allow",
+        glob: "allow",
+        grep: "allow",
+        edit: "ask", // create or change a file (edit, write) — only with the user's approval
+        "docs_*": "allow", // document tools from our MCP server (search, list, read)
+        bash: "deny",
+        apply_patch: "deny",
+        webfetch: "deny",
+        websearch: "deny",
+        task: "deny", // sub-agents
+        todowrite: "deny",
+        skill: "deny",
+        question: "deny", // would pause for an answer the UI can't give yet
+        external_directory: "deny",
       },
       steps: 12, // at most 12 model calls per message: stops runaway agent loops
     },
@@ -115,11 +119,11 @@ export const config: Config = {
       timeout: 30_000,
     },
   },
-  // v1 is read-only: the agent may read and search files, but not change
-  // anything. "ask" would pause the agent until someone approves, and the
-  // UI can't approve yet — that comes with the permissions step.
+  // What the agent may do on its own ("allow"), only with approval ("ask" — it pauses and
+  // the UI shows Allow / Deny), or never ("deny"). File changes need approval; shell
+  // commands, web access and anything outside the workspace are off.
   permission: {
-    edit: "deny",
+    edit: "ask",
     bash: "deny",
     webfetch: "deny",
     external_directory: "deny",

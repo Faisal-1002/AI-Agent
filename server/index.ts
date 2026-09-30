@@ -2,13 +2,13 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
-import type { ChatEvent, GuardFlags, ImageAttachment, ModelInfo } from "../shared/chat.js";
+import type { ChatEvent, GuardFlags, ImageAttachment, ModelInfo, PermissionReply } from "../shared/chat.js";
 import { migrate } from "./db.js";
 import { addDocument, deleteDocument, fileType, listDocuments, MAX_UPLOAD_BYTES, SUPPORTED } from "./documents.js";
 import { reviewReply, screenPrompt } from "./guard.js";
 import { mcp } from "./mcp.js";
 import { AGENT, client, MODEL, MODEL_INFO } from "./opencode.js";
-import { guardFlags, sessionOf, toChatEvent, toChatMessage, toConversation } from "./translate.js";
+import { guardFlags, sessionOf, toChatEvent, toChatMessage, toConversation, toPermissionAsk } from "./translate.js";
 import { voice } from "./voice.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -78,13 +78,15 @@ app.delete("/api/conversations/:id", async (c) => {
 // Full history, whether the agent is still working on it, and safety-filter flags.
 app.get("/api/conversations/:id/messages", async (c) => {
   const sessionID = c.req.param("id");
-  const [messages, status, session] = await Promise.all([
+  const [messages, status, session, permissions] = await Promise.all([
     client.session.messages({ sessionID }).then(unwrap),
     client.session.status({}).then(unwrap),
     client.session.get({ sessionID }).then(unwrap),
+    client.permission.list({}).then(unwrap),
   ]);
   const busy = status[sessionID] !== undefined && status[sessionID].type !== "idle";
-  return c.json({ messages: messages.map(toChatMessage), busy, flags: guardFlags(session) });
+  const pending = permissions.filter((p) => p.sessionID === sessionID).map(toPermissionAsk);
+  return c.json({ messages: messages.map(toChatMessage), busy, flags: guardFlags(session), permissions: pending });
 });
 
 // Images: the browser resizes them first (fewer image tokens); these are hard limits.
@@ -186,6 +188,14 @@ async function reviewWhenDone(sessionID: string, prompt: string) {
     console.error("[guard] reply review failed:", (err as Error).message);
   }
 }
+
+// Answer an approval request (the agent is paused until this arrives).
+app.post("/api/conversations/:id/permissions/:requestID", async (c) => {
+  const { reply } = await c.req.json<{ reply: PermissionReply }>();
+  if (!["once", "always", "reject"].includes(reply)) return c.json({ error: "Invalid reply" }, 400);
+  check(await client.permission.reply({ requestID: c.req.param("requestID"), reply }));
+  return c.body(null, 204);
+});
 
 // Stop the agent mid-reply.
 app.post("/api/conversations/:id/abort", async (c) => {

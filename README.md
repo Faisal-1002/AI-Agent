@@ -32,7 +32,8 @@ LiteLLM gateway               localhost:4000   gateway/      one front door to e
 - **Backend** — conversations (= OpenCode sessions), prompts, stop, history, and a live event stream; translates OpenCode's data into a small model the UI understands (`server/translate.ts`, types in `shared/chat.ts`).
 - **Web UI** — a chat app in the style of LibreChat: conversation sidebar, streamed markdown replies, collapsible "Thoughts" and tool calls (with their input and output), stop button, light/dark theme.
 
-The agent can only see files in [`workspace/`](workspace). For now it's **read-only**: edits, shell commands and web fetches are denied (see `permission` in `server/opencode.ts`).
+The agent can only see files in [`workspace/`](workspace). It may read them freely and **change them only with your
+approval** ([Approvals](#approvals)); shell commands and web access are off.
 
 ## Requirements
 
@@ -202,6 +203,39 @@ Lessons learned:
   steps. Clearer tool descriptions help; it's a target for the optimization phase.
 - **Measure, don't guess**: every change above was checked with repeated runs, not one lucky answer.
 
+## Approvals
+
+seyl-ai can create and change files in the workspace — but every change waits for you:
+
+```
+agent wants to edit notes.md ──► OpenCode pauses (permission "ask") ──► event ──► card in the chat with the diff
+you: Allow once / Allow for this chat / Deny ──► POST /api/conversations/:id/permissions/:requestID ──► agent continues
+```
+
+| Action | Rule | |
+|---|---|---|
+| read, glob, grep, document tools | allow | on its own |
+| edit / write (change or create a file) | **ask** | shows the diff, waits for your answer |
+| bash, web, sub-agents, outside the workspace | deny | not even offered to the model |
+
+- Pending approvals survive a page reload (the api lists them from OpenCode).
+- The workspace is on a persistent volume, so approved changes survive restarts; an `initContainer` seeds it from
+  the image once (`cp -n` never overwrites your edits).
+- Tested: an approved edit landed on disk and survived a harness restart; a denied `todo.md` was never created and
+  the agent asked what to do instead.
+
+Lessons learned:
+
+- **"Available" is not "allowed".** The agent's tool list was written as `tools: { edit: true }`. OpenCode turns that
+  into `permission: { edit: "allow" }` — silently overriding the global `"ask"`. The first test changed a file with
+  **no approval**. Found only by reading the *effective* config back from the running harness. Now the rules are
+  written as permissions, and **the harness checks them at startup and refuses to run if they're wrong**
+  (`server/harness.ts`) — policy as a test, not as hope.
+- **This is why you review diffs**: asked to add one line, the model also changed the line above (a stray space).
+- **Small models copy line numbers**: `read` shows lines as `6: text`; the model put `6:` into the text to
+  replace, so `edit` failed four times — then it rewrote the whole file with `write`. The system prompt now says
+  line numbers aren't part of the file and how to append.
+
 ## Images
 
 Attach up to 4 images to a message — 📎 button, paste, or drag & drop — and ask about them. Qwen3.5 9B reads them.
@@ -326,7 +360,7 @@ After changing code: `docker compose build` then `kubectl -n seyl-ai rollout res
 | Manifest | Contents |
 |---|---|
 | `k8s/00-namespace.yaml` | the `seyl-ai` namespace |
-| `k8s/10-harness.yaml` | harness Deployment (1 replica, `Recreate`), 1 GiB PersistentVolumeClaim for sessions, ClusterIP Service |
+| `k8s/10-harness.yaml` | harness Deployment (1 replica, `Recreate`), 1 GiB PersistentVolumeClaim for sessions and the workspace (seeded by an `initContainer`), ClusterIP Service |
 | `k8s/20-api.yaml` | api Deployment (2 replicas) with readiness + liveness probes on `/api/healthz`, `preStop` pause, ClusterIP Service |
 | `k8s/30-web.yaml` | web Deployment (2 replicas), `preStop` pause, LoadBalancer Service on port 8080 |
 | `k8s/40-asr.yaml`, `k8s/50-tts.yaml` | voice Deployments (1 replica each) with a 5 GiB volume for the model, a `startupProbe` that allows 10 min for the first download, memory limits sized from peak usage |
@@ -393,6 +427,7 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `web/src/components/chat/SpeakButton.tsx` | 🔊 read aloud, via the shared player in `web/src/lib/speaker.ts` |
 | `web/src/components/documents/DocumentsPanel.tsx` | Document library: upload (drag & drop), indexing status, delete |
 | `web/src/lib/images.ts` | Shrinks and re-encodes attached images in the browser before upload |
+| `web/src/components/chat/PermissionCard.tsx` | The approval card: what, which file, the diff, Allow / Deny |
 | `ollama/*.Modelfile` | Model variants: Qwen3.5 9B (32k context), Qwen3.5 0.8B (CPU); the old Qwen3 8B for reference |
 | `workspace/` | The only folder the agent can see |
 
@@ -406,6 +441,7 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `DELETE /api/conversations/:id` | Delete one |
 | `GET /api/conversations/:id/messages` | History + whether the agent is still working |
 | `POST /api/conversations/:id/prompt` | Send a message: `{ text, images? }` (reply arrives on the event stream) |
+| `POST /api/conversations/:id/permissions/:requestID` | Answer an approval request: `{ reply: "once" | "always" | "reject" }` |
 | `POST /api/conversations/:id/abort` | Stop the agent |
 | `GET /api/conversations/:id/events` | Live updates (Server-Sent Events) |
 | `GET /api/voice/status` | Which voice services are up (`{ asr, tts }`) |

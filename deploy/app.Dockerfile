@@ -25,6 +25,8 @@ RUN npm ci --omit=dev --ignore-scripts
 COPY server ./server
 COPY shared ./shared
 COPY --chown=node:node workspace /workspace
+# A second copy that seeds the persistent workspace volume the first time (k8s initContainer).
+COPY --chown=node:node workspace /workspace-seed
 
 # OpenCode keeps sessions, caches and downloaded provider packages under XDG dirs.
 # Point them all at /data so one volume persists everything.

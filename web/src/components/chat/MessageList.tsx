@@ -1,16 +1,25 @@
 import { useMemo } from "react";
-import type { ChatMessage, GuardFlags } from "../../../../shared/chat";
+import type { ChatMessage, GuardFlags, PermissionAsk, PermissionReply } from "../../../../shared/chat";
 import { groupTurns, type Turn } from "../../lib/conversations";
 import { useStickToBottom } from "../../hooks/useStickToBottom";
 import { MessageTurn } from "./MessageTurn";
+import { PermissionCard } from "./PermissionCard";
 
-type Props = { messages: ChatMessage[]; busy: boolean; canSpeak: boolean; flags: GuardFlags };
+type Props = {
+  messages: ChatMessage[];
+  busy: boolean;
+  canSpeak: boolean;
+  flags: GuardFlags;
+  permissions: PermissionAsk[];
+  onPermission: (id: string, reply: PermissionReply) => void;
+};
 
 const PENDING: Turn = { id: "pending", role: "assistant", messages: [] };
 
-export function MessageList({ messages, busy, canSpeak, flags }: Props) {
+export function MessageList({ messages, busy, canSpeak, flags, permissions, onPermission }: Props) {
   const turns = useMemo(() => groupTurns(messages), [messages]);
-  const scrollRef = useStickToBottom<HTMLDivElement>(messages);
+  const content = useMemo(() => [messages, permissions], [messages, permissions]); // changes when either does
+  const scrollRef = useStickToBottom<HTMLDivElement>(content);
 
   const last = turns.at(-1);
   // The agent is working but its reply hasn't started yet: show a placeholder row.
@@ -29,6 +38,9 @@ export function MessageList({ messages, busy, canSpeak, flags }: Props) {
           />
         ))}
         {waiting && <MessageTurn turn={PENDING} streaming canSpeak={false} />}
+        {permissions.map((ask) => (
+          <PermissionCard key={ask.id} ask={ask} onAnswer={(reply) => onPermission(ask.id, reply)} />
+        ))}
       </div>
     </div>
   );

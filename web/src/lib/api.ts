@@ -1,4 +1,4 @@
-import type { ChatMessage, Conversation, DocumentInfo, GuardFlags, ImageAttachment, ModelInfo, VoiceStatus } from "../../../shared/chat";
+import type { ChatMessage, Conversation, DocumentInfo, GuardFlags, ImageAttachment, ModelInfo, PermissionAsk, PermissionReply, VoiceStatus } from "../../../shared/chat";
 
 // Typed wrappers around the seyl-ai backend (server/index.ts).
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -16,12 +16,18 @@ export const api = {
   createConversation: () => request<Conversation>("/conversations", { method: "POST" }),
   deleteConversation: (id: string) => request<void>(`/conversations/${id}`, { method: "DELETE" }),
   messages: (id: string) =>
-    request<{ messages: ChatMessage[]; busy: boolean; flags: GuardFlags }>(`/conversations/${id}/messages`),
+    request<{ messages: ChatMessage[]; busy: boolean; flags: GuardFlags; permissions: PermissionAsk[] }>(`/conversations/${id}/messages`),
   prompt: (id: string, text: string, images: ImageAttachment[] = []) =>
     request<void>(`/conversations/${id}/prompt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, images }),
+    }),
+  answerPermission: (id: string, requestID: string, reply: PermissionReply) =>
+    request<void>(`/conversations/${id}/permissions/${requestID}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reply }),
     }),
   abort: (id: string) => request<void>(`/conversations/${id}/abort`, { method: "POST" }),
   eventsUrl: (id: string) => `/api/conversations/${id}/events`,

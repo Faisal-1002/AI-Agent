@@ -74,7 +74,15 @@ export function App() {
         {empty ? (
           <Landing />
         ) : (
-          <MessageList key={activeId} messages={chat.messages} busy={chat.busy} canSpeak={voice.tts} flags={chat.flags} />
+          <MessageList
+            key={activeId}
+            messages={chat.messages}
+            busy={chat.busy}
+            canSpeak={voice.tts}
+            flags={chat.flags}
+            permissions={chat.permissions}
+            onPermission={chat.answerPermission}
+          />
         )}
 
         {chat.error && (

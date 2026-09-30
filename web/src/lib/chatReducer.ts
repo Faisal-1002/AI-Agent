@@ -1,15 +1,22 @@
-import type { ChatEvent, ChatMessage, ChatPart, GuardFlags } from "../../../shared/chat";
+import type { ChatEvent, ChatMessage, ChatPart, GuardFlags, PermissionAsk } from "../../../shared/chat";
 
 // flags: replies the safety filter flagged (keyed by turn id).
-export type ChatState = { messages: ChatMessage[]; busy: boolean; flags: GuardFlags; error?: string };
+// permissions: approval requests the agent is waiting on.
+export type ChatState = {
+  messages: ChatMessage[];
+  busy: boolean;
+  flags: GuardFlags;
+  permissions: PermissionAsk[];
+  error?: string;
+};
 
 export type ChatAction =
   | ChatEvent
-  | { type: "reset"; messages: ChatMessage[]; busy: boolean; flags: GuardFlags }
+  | { type: "reset"; messages: ChatMessage[]; busy: boolean; flags: GuardFlags; permissions: PermissionAsk[] }
   | { type: "sending" }
   | { type: "failed"; message: string };
 
-export const initialChat: ChatState = { messages: [], busy: false, flags: {} };
+export const initialChat: ChatState = { messages: [], busy: false, flags: {}, permissions: [] };
 
 // Apply a change to one message, creating it if this is the first we hear of it.
 function updateMessage(
@@ -40,7 +47,7 @@ function appendDelta(parts: ChatPart[], partID: string, delta: string): ChatPart
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "reset":
-      return { messages: action.messages, busy: action.busy, flags: action.flags };
+      return { messages: action.messages, busy: action.busy, flags: action.flags, permissions: action.permissions };
     case "sending":
       return { ...state, busy: true, error: undefined };
     case "failed":
@@ -76,6 +83,10 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       };
     case "session":
       return { ...state, flags: action.flags };
+    case "permission":
+      return { ...state, permissions: [...state.permissions.filter((p) => p.id !== action.ask.id), action.ask] };
+    case "permission-done":
+      return { ...state, permissions: state.permissions.filter((p) => p.id !== action.id) };
     case "ready":
       return state;
   }

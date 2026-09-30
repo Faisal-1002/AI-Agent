@@ -31,6 +31,18 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000 # the volume is writable by the "node" user (uid 1000)
+      # The agent can now edit files (with the user's approval), so the workspace lives on the
+      # persistent volume. On first start it's empty: copy the image's starter files in.
+      # cp -n never overwrites, so the user's edits survive every restart and upgrade.
+      initContainers:
+        - name: seed-workspace
+          image: seyl-ai/app:dev
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "cp -rn /workspace-seed/. /workspace/"]
+          volumeMounts:
+            - name: data
+              mountPath: /workspace
+              subPath: workspace
       containers:
         - name: harness
           image: seyl-ai/app:dev
@@ -52,6 +64,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: data # the same volume, its "workspace" folder
+              mountPath: /workspace
+              subPath: workspace
           readinessProbe: # only send traffic once OpenCode is listening
             tcpSocket: { port: 4097 }
             initialDelaySeconds: 3

@@ -1,5 +1,6 @@
 import type { AssistantMessage, Event, Message, Part, Session } from "@opencode-ai/sdk/v2";
-import type { ChatEvent, ChatMessage, ChatPart, Conversation, GuardFlags } from "../shared/chat.js";
+import type { PermissionRequest } from "@opencode-ai/sdk/v2";
+import type { ChatEvent, ChatMessage, ChatPart, Conversation, GuardFlags, PermissionAsk } from "../shared/chat.js";
 
 // Translation layer: OpenCode's rich data model → the small model our UI understands.
 
@@ -68,10 +69,25 @@ export function sessionOf(event: Event): string | undefined {
     case "session.idle":
     case "session.updated":
     case "session.error":
+    case "permission.asked":
+    case "permission.replied":
       return event.properties.sessionID;
     default:
       return undefined;
   }
+}
+
+// An approval request from OpenCode → what the UI shows. For edits, OpenCode's metadata
+// usually carries the file path and a diff of the proposed change.
+export function toPermissionAsk(request: PermissionRequest): PermissionAsk {
+  const meta = request.metadata as { filepath?: string; filePath?: string; diff?: string };
+  const file = meta.filepath ?? meta.filePath;
+  return {
+    id: request.id,
+    action: request.permission,
+    files: request.patterns.length ? request.patterns : file ? [file] : [],
+    ...(typeof meta.diff === "string" && { diff: meta.diff }),
+  };
 }
 
 export function toChatEvent(event: Event): ChatEvent | undefined {
@@ -96,6 +112,10 @@ export function toChatEvent(event: Event): ChatEvent | undefined {
       return { type: "status", busy: false };
     case "session.updated":
       return { type: "session", title: event.properties.info.title, flags: guardFlags(event.properties.info) };
+    case "permission.asked":
+      return { type: "permission", ask: toPermissionAsk(event.properties) };
+    case "permission.replied":
+      return { type: "permission-done", id: event.properties.requestID, reply: event.properties.reply };
     case "session.error": {
       const message = errorText(event.properties.error);
       return message ? { type: "error", message } : { type: "status", busy: false };

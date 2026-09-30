@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { ChatEvent, Conversation, ImageAttachment } from "../../../shared/chat";
+import type { ChatEvent, Conversation, ImageAttachment, PermissionReply } from "../../../shared/chat";
 import { api } from "../lib/api";
 import { chatReducer, initialChat } from "../lib/chatReducer";
 
@@ -43,17 +43,17 @@ export function useChat(conversationId: string | undefined, handlers: Handlers) 
     if (!conversationId) {
       stream.current?.source.close();
       stream.current = null;
-      dispatch({ type: "reset", messages: [], busy: false, flags: {} });
+      dispatch({ type: "reset", messages: [], busy: false, flags: {}, permissions: [] });
       return;
     }
     // send() just created this conversation and is already streaming it.
     if (stream.current?.id === conversationId && stream.current.openedBySend) return;
 
     let cancelled = false;
-    dispatch({ type: "reset", messages: [], busy: false, flags: {} });
+    dispatch({ type: "reset", messages: [], busy: false, flags: {}, permissions: [] });
     api
       .messages(conversationId)
-      .then(({ messages, busy, flags }) => !cancelled && dispatch({ type: "reset", messages, busy, flags }))
+      .then(({ messages, busy, flags, permissions }) => !cancelled && dispatch({ type: "reset", messages, busy, flags, permissions }))
       .catch((err: Error) => !cancelled && dispatch({ type: "failed", message: err.message }));
     connect(conversationId, false).catch(() => {});
     return () => {
@@ -86,9 +86,19 @@ export function useChat(conversationId: string | undefined, handlers: Handlers) 
     [conversationId, connect],
   );
 
+  // Answer an approval request. Remove it right away; the event stream confirms it.
+  const answerPermission = useCallback(
+    (requestID: string, reply: PermissionReply) => {
+      if (!conversationId) return;
+      dispatch({ type: "permission-done", id: requestID, reply });
+      api.answerPermission(conversationId, requestID, reply).catch((err: Error) => dispatch({ type: "failed", message: err.message }));
+    },
+    [conversationId],
+  );
+
   const stop = useCallback(() => {
     if (conversationId) api.abort(conversationId).catch(() => {});
   }, [conversationId]);
 
-  return { ...state, send, stop };
+  return { ...state, send, stop, answerPermission };
 }
