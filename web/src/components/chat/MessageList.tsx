@@ -4,11 +4,11 @@ import { groupTurns, type Turn } from "../../lib/conversations";
 import { useStickToBottom } from "../../hooks/useStickToBottom";
 import { MessageTurn } from "./MessageTurn";
 
-type Props = { messages: ChatMessage[]; busy: boolean };
+type Props = { messages: ChatMessage[]; busy: boolean; canSpeak: boolean };
 
 const PENDING: Turn = { id: "pending", role: "assistant", messages: [] };
 
-export function MessageList({ messages, busy }: Props) {
+export function MessageList({ messages, busy, canSpeak }: Props) {
   const turns = useMemo(() => groupTurns(messages), [messages]);
   const scrollRef = useStickToBottom<HTMLDivElement>(messages);
 
@@ -20,9 +20,14 @@ export function MessageList({ messages, busy }: Props) {
     <div ref={scrollRef} className="flex-1 overflow-y-auto">
       <div className="flex flex-col pb-6 pt-2">
         {turns.map((turn) => (
-          <MessageTurn key={turn.id} turn={turn} streaming={busy && turn === last && turn.role === "assistant"} />
+          <MessageTurn
+            key={turn.id}
+            turn={turn}
+            streaming={busy && turn === last && turn.role === "assistant"}
+            canSpeak={canSpeak}
+          />
         ))}
-        {waiting && <MessageTurn turn={PENDING} streaming />}
+        {waiting && <MessageTurn turn={PENDING} streaming canSpeak={false} />}
       </div>
     </div>
   );

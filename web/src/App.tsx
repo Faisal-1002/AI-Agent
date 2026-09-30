@@ -8,12 +8,14 @@ import { useChat } from "./hooks/useChat";
 import { useConversations } from "./hooks/useConversations";
 import { useMediaQuery } from "./hooks/useMediaQuery";
 import { useModel } from "./hooks/useModel";
+import { useVoiceStatus } from "./hooks/useVoiceStatus";
 
 export function App() {
   const wide = useMediaQuery("(min-width: 768px)");
   const [sidebarOpen, setSidebarOpen] = useState(wide);
   const [activeId, setActiveId] = useState<string>();
   const model = useModel();
+  const voice = useVoiceStatus();
   const { conversations, add, rename, remove } = useConversations();
 
   const chat = useChat(activeId, {
@@ -66,7 +68,11 @@ export function App() {
           model={model}
         />
 
-        {empty ? <Landing /> : <MessageList key={activeId} messages={chat.messages} busy={chat.busy} />}
+        {empty ? (
+          <Landing />
+        ) : (
+          <MessageList key={activeId} messages={chat.messages} busy={chat.busy} canSpeak={voice.tts} />
+        )}
 
         {chat.error && (
           <div className="mx-auto mb-2 w-full max-w-3xl px-4 md:px-5">
@@ -76,7 +82,7 @@ export function App() {
           </div>
         )}
 
-        <ChatForm busy={chat.busy} onSend={chat.send} onStop={chat.stop} />
+        <ChatForm busy={chat.busy} canTranscribe={voice.asr} onSend={chat.send} onStop={chat.stop} />
         <p className="px-4 py-2 text-center text-xs text-text-tertiary">
           seyl-ai runs locally on your PC and can make mistakes.
         </p>

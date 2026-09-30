@@ -31,6 +31,9 @@ export type Conversation = { id: string; title: string; updatedAt: number };
 
 export type ModelInfo = { provider: string; name: string };
 
+// Which voice services are reachable (speech-to-text, text-to-speech).
+export type VoiceStatus = { asr: boolean; tts: boolean };
+
 // Live updates streamed to the UI over Server-Sent Events.
 export type ChatEvent =
   | { type: "ready" }

@@ -1,0 +1,71 @@
+# Speech-to-text: Qwen3-ASR 0.6B on the CPU (voice/asr).
+# The model (~1.9 GB) is downloaded on first start into a persistent volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: asr-models
+  namespace: seyl-ai
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: asr
+  namespace: seyl-ai
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # one pod owns the model volume
+  selector:
+    matchLabels: { app: asr }
+  template:
+    metadata:
+      labels: { app: asr }
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: asr
+          image: seyl-ai/asr:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: models
+              mountPath: /models
+          # startupProbe: allow up to 10 minutes for the first model download;
+          # the other probes only begin once this one has succeeded.
+          startupProbe:
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 30
+            timeoutSeconds: 5
+          # Measured: ~4.5 GiB after serving requests. Size limits from PEAK usage, not idle.
+          resources:
+            requests: { cpu: "1", memory: 4Gi }
+            limits: { memory: 7Gi }
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: asr-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: asr
+  namespace: seyl-ai
+spec:
+  selector: { app: asr }
+  ports:
+    - port: 8000
+      targetPort: 8000

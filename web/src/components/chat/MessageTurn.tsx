@@ -6,8 +6,9 @@ import { CopyButton } from "../ui/CopyButton";
 import { Markdown } from "../ui/Markdown";
 import { Reasoning } from "./parts/Reasoning";
 import { ToolCall } from "./parts/ToolCall";
+import { SpeakButton } from "./SpeakButton";
 
-type Props = { turn: Turn; streaming: boolean };
+type Props = { turn: Turn; streaming: boolean; canSpeak: boolean };
 
 function Part({ part, isUser, streaming }: { part: ChatPart; isUser: boolean; streaming: boolean }) {
   switch (part.kind) {
@@ -21,7 +22,7 @@ function Part({ part, isUser, streaming }: { part: ChatPart; isUser: boolean; st
 }
 
 // One row in the chat: avatar + name, then everything said in that turn.
-export const MessageTurn = memo(function MessageTurn({ turn, streaming }: Props) {
+export const MessageTurn = memo(function MessageTurn({ turn, streaming, canSpeak }: Props) {
   const isUser = turn.role === "user";
   const parts = turn.messages.flatMap((m) => m.parts);
   const errors = turn.messages.map((m) => m.error).filter(Boolean);
@@ -51,12 +52,14 @@ export const MessageTurn = memo(function MessageTurn({ turn, streaming }: Props)
         </div>
 
         {!streaming && text && (
-          <div className="flex gap-1 pt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          // Shown on hover — and kept visible while a read-aloud is active ([data-active]).
+          <div className="flex items-center gap-1 pt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 has-[[data-active]]:opacity-100">
             <CopyButton
               getText={() => text}
               label="Copy to clipboard"
               className="p-1 text-text-secondary hover:bg-surface-hover hover:text-text-primary"
             />
+            {canSpeak && !isUser && <SpeakButton id={turn.id} text={text} />}
           </div>
         )}
       </div>

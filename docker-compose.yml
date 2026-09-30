@@ -1,6 +1,7 @@
 # Run the whole stack in containers:   docker compose up --build
 # Then open http://localhost:8080
 # Ollama stays on your PC (it needs the GPU); containers reach it via host.docker.internal.
+# Voice only (for `npm run dev`):      docker compose up -d asr tts
 
 services:
   harness:
@@ -18,6 +19,8 @@ services:
     image: seyl-ai/app:dev
     environment:
       OPENCODE_URL: http://harness:4097
+      ASR_URL: http://asr:8000
+      TTS_URL: http://tts:8000
     depends_on: [harness]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
@@ -31,5 +34,23 @@ services:
     ports: ["8080:80"]
     depends_on: [api]
 
+  # Speech-to-text (Qwen3-ASR 0.6B, CPU). Published on localhost only, for `npm run dev`.
+  asr:
+    build: voice/asr
+    image: seyl-ai/asr:dev
+    ports: ["127.0.0.1:8001:8000"]
+    volumes:
+      - asr-models:/models # model weights, downloaded once
+
+  # Text-to-speech (Qwen3-TTS 0.6B, CPU).
+  tts:
+    build: voice/tts
+    image: seyl-ai/tts:dev
+    ports: ["127.0.0.1:8002:8000"]
+    volumes:
+      - tts-models:/models
+
 volumes:
   opencode-data:
+  asr-models:
+  tts-models:

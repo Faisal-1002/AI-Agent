@@ -64,6 +64,44 @@ npm run dev
 
 Then open http://localhost:5173 and ask something like *"Read notes.md and tell me the project codename."*
 
+Voice is optional; to use it with `npm run dev`, start the voice containers: `docker compose up -d asr tts`.
+
+## Voice
+
+```
+🎤 mic button ──► POST /api/voice/transcribe ──► asr  (Qwen3-ASR 0.6B, CPU) ──► text in the message box
+🔊 read aloud ──► POST /api/voice/speak      ──► tts  (Qwen3-TTS 0.6B, CPU) ──► audio, sentence by sentence
+```
+
+- Each voice model is a small Python (FastAPI) service in its own container — `voice/asr`, `voice/tts` — with an
+  **OpenAI-compatible** API (`/v1/audio/transcriptions`, `/v1/audio/speech`), so it could later be swapped for a
+  hosted service or put behind a gateway like LiteLLM. Ollama can't serve audio models.
+- They run on the **CPU**: the GPU is reserved for the chat model. Models download from Hugging Face on first start
+  (ASR ~1.9 GB, TTS ~2.5 GB) into a volume.
+- The UI shows the buttons only when `/api/voice/status` says the services are up.
+
+Measured on an i7-14700K (CPU only):
+
+| | Speed | Notes |
+|---|---|---|
+| Speech-to-text | 7.3 s of audio → text in ~2.5 s (≈3× faster than real time) | 52 languages, auto-detected |
+| Text-to-speech | ~2.4 s of work per 1 s of speech | voice "Aiden"; 10 languages (no Arabic yet) |
+
+Because TTS is slower than real time on a CPU, a reply is read in **sentence chunks** (`shared/speech.ts`,
+`web/src/lib/speaker.ts`): the first (short) chunk plays after ~10 s, and chunk *n+1* is generated while chunk *n*
+plays. Code blocks are skipped; headings and bullets become sentences.
+
+Lessons learned:
+
+- **One environment per model**: `qwen-asr` pins `transformers==4.57.6`, `qwen-tts` pins `4.57.3` — they can't share
+  a Python environment. Separate containers solve it.
+- **More threads ≠ faster**: TTS with 4 threads ≈ 12 threads; 20 threads was 2× slower. It generates audio step by
+  step, so per-step latency, not core count, is the limit.
+- **Size memory limits from peak, not idle**: TTS idles at ~4.2 GiB; with a 5 GiB limit, Kubernetes **OOMKilled** it
+  mid-request (and restarted it automatically). Limits are now 7–8 GiB.
+- **Cap generation length**: TTS allowed up to 2048 audio frames (~170 s) by default; a run-away generation grows
+  memory. It's now capped at ~2× the expected speech length.
+
 ## Run in containers
 
 Needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) (WSL 2 engine on Windows). Ollama keeps running on the host because it needs the GPU; containers reach it at `host.docker.internal:11434`.
@@ -71,16 +109,22 @@ Needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) (WSL 2 e
 ```
             ┌──────────── Kubernetes (namespace seyl-ai) ────────────┐
 Browser ──► │ web ×2 (nginx)  ──/api──►  api ×2  ──►  harness ×1      │ ──► Ollama on the host (GPU)
-:8080       │ LoadBalancer               Service      Service + disk   │
+:8080       │ LoadBalancer               Service  │   Service + disk   │
+            │                                     ├─► asr ×1 (CPU)     │
+            │                                     └─► tts ×1 (CPU)     │
             └────────────────────────────────────────────────────────┘
 ```
 
-Two images, built from `deploy/`:
+Four images:
 
 | Image | Built from | Runs |
 |---|---|---|
 | `seyl-ai/app:dev` | `deploy/app.Dockerfile` | the **api** (default command) *or* the **harness** (`server/harness.ts`) |
 | `seyl-ai/web:dev` | `deploy/web.Dockerfile` | nginx serving the built UI, proxying `/api` → `api:3000` (`deploy/nginx.conf`) |
+| `seyl-ai/asr:dev` | `voice/asr/Dockerfile` | speech-to-text service (Python, CPU PyTorch, ffmpeg) |
+| `seyl-ai/tts:dev` | `voice/tts/Dockerfile` | text-to-speech service (Python, CPU PyTorch) |
+
+Docker Desktop needs ~12 GB of its memory for everything (the voice models take ~4.5 GB each).
 
 ### Docker Compose
 
@@ -117,6 +161,7 @@ After changing code: `docker compose build` then `kubectl -n seyl-ai rollout res
 | `k8s/10-harness.yaml` | harness Deployment (1 replica, `Recreate`), 1 GiB PersistentVolumeClaim for sessions, ClusterIP Service |
 | `k8s/20-api.yaml` | api Deployment (2 replicas) with readiness + liveness probes on `/api/healthz`, `preStop` pause, ClusterIP Service |
 | `k8s/30-web.yaml` | web Deployment (2 replicas), `preStop` pause, LoadBalancer Service on port 8080 |
+| `k8s/40-asr.yaml`, `k8s/50-tts.yaml` | voice Deployments (1 replica each) with a 5 GiB volume for the model, a `startupProbe` that allows 10 min for the first download, memory limits sized from peak usage |
 
 Lessons learned while testing rollouts (hammering the API during `rollout restart`):
 
@@ -134,6 +179,9 @@ All settings are environment variables with local-dev defaults (`server/opencode
 | `OPENCODE_HOSTNAME` / `OPENCODE_PORT` | `127.0.0.1` / `4097` | harness |
 | `OLLAMA_URL` | `http://localhost:11434` | harness → Ollama |
 | `SEYL_WORKSPACE` | `./workspace` | folder the agent works in (path inside the harness) |
+| `ASR_URL` / `TTS_URL` | `http://127.0.0.1:8001` / `:8002` | api → voice services |
+| `TTS_VOICE` | `Aiden` | api: voice used for read-aloud |
+| `TORCH_THREADS` | `8` (asr) / `4` (tts) | voice services: CPU threads |
 
 ## Project layout
 
@@ -143,14 +191,18 @@ All settings are environment variables with local-dev defaults (`server/opencode
 | `server/opencode.ts` | OpenCode config (model, provider, permissions) + typed client |
 | `server/index.ts` | Backend HTTP API (below) |
 | `server/translate.ts` | OpenCode sessions/messages/events → our chat model |
+| `server/voice.ts` | `/api/voice/*`: forwards to the voice services |
 | `shared/chat.ts` | Types shared by backend and UI |
+| `shared/speech.ts` | Markdown → speakable text, split into sentence chunks |
+| `voice/asr/`, `voice/tts/` | The voice services (Python + Dockerfile each) |
 | `web/src/App.tsx` | Page layout: sidebar + chat |
 | `web/src/hooks/` | `useChat` (history, live events, send, stop), `useConversations`, … |
 | `web/src/lib/` | API client, chat reducer, date grouping — plain functions, no React |
 | `web/src/components/ui/` | Reusable pieces: `IconButton`, `Collapsible`, `CodeBlock`, `Markdown`, `CopyButton`, `Avatar` |
 | `web/src/components/chat/` | `MessageList`, `MessageTurn`, `parts/Reasoning`, `parts/ToolCall`, `Landing`, `ChatHeader` |
 | `web/src/components/nav/` | `Sidebar`, `ConversationItem` |
-| `web/src/components/input/` | `ChatForm`, `ComposerButton` |
+| `web/src/components/input/` | `ChatForm`, `ComposerButton`, `MicButton` (🎤) |
+| `web/src/components/chat/SpeakButton.tsx` | 🔊 read aloud, via the shared player in `web/src/lib/speaker.ts` |
 | `ollama/*.Modelfile` | Model variants: Qwen3.5 9B (32k context), Qwen3.5 0.8B (CPU); the old Qwen3 8B for reference |
 | `workspace/` | The only folder the agent can see |
 
@@ -166,6 +218,9 @@ All settings are environment variables with local-dev defaults (`server/opencode
 | `POST /api/conversations/:id/prompt` | Send a message (reply arrives on the event stream) |
 | `POST /api/conversations/:id/abort` | Stop the agent |
 | `GET /api/conversations/:id/events` | Live updates (Server-Sent Events) |
+| `GET /api/voice/status` | Which voice services are up (`{ asr, tts }`) |
+| `POST /api/voice/transcribe` | Multipart audio (`file`) → `{ text, language }` |
+| `POST /api/voice/speak` | `{ text }` (markdown ok) → `audio/wav` |
 
 ## Credits
 

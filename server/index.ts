@@ -4,6 +4,7 @@ import { streamSSE } from "hono/streaming";
 import type { ChatEvent, ModelInfo } from "../shared/chat.js";
 import { client, MODEL, MODEL_INFO } from "./opencode.js";
 import { sessionOf, toChatEvent, toChatMessage, toConversation } from "./translate.js";
+import { voice } from "./voice.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const app = new Hono();
@@ -34,6 +35,9 @@ app.get("/api/readyz", async (c) => {
 });
 
 app.get("/api/model", (c) => c.json<ModelInfo>(MODEL_INFO));
+
+// Speech-to-text and text-to-speech (server/voice.ts).
+app.route("/api/voice", voice);
 
 // Conversations = OpenCode sessions.
 app.get("/api/conversations", async (c) => {

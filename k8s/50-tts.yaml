@@ -1,0 +1,69 @@
+# Text-to-speech: Qwen3-TTS 0.6B on the CPU (voice/tts).
+# The model (~2.5 GB) is downloaded on first start into a persistent volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tts-models
+  namespace: seyl-ai
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tts
+  namespace: seyl-ai
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: tts }
+  template:
+    metadata:
+      labels: { app: tts }
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: tts
+          image: seyl-ai/tts:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: models
+              mountPath: /models
+          startupProbe: # see 40-asr.yaml
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 30
+            timeoutSeconds: 5
+          # Measured: ~4.2 GiB idle, more while generating; 5 GiB got OOMKilled. Size limits from PEAK usage, not idle.
+          resources:
+            requests: { cpu: "1", memory: 5Gi }
+            limits: { memory: 8Gi }
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: tts-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tts
+  namespace: seyl-ai
+spec:
+  selector: { app: tts }
+  ports:
+    - port: 8000
+      targetPort: 8000

@@ -20,6 +20,10 @@ spec:
           env:
             - name: OPENCODE_URL
               value: http://harness:4097
+            - name: ASR_URL
+              value: http://asr:8000
+            - name: TTS_URL
+              value: http://tts:8000
           ports:
             - containerPort: 3000
           # Zero-downtime rollouts: when a pod is told to stop, the load balancer
