@@ -1,7 +1,8 @@
-# Run the whole stack in containers:   docker compose up --build
+# Run the whole stack in containers:   docker compose up --build -d   then   npm run gateway:keys
 # Then open http://localhost:8080
-# Ollama stays on your PC (it needs the GPU); containers reach it via host.docker.internal.
-# Voice only (for `npm run dev`):      docker compose up -d asr tts
+# Secrets come from .env (git-ignored; see .env.example) — Compose substitutes ${...} from it.
+# Ollama stays on your PC (it needs the GPU); the gateway reaches it via host.docker.internal.
+# Just the model side (for `npm run dev`):   docker compose up -d litellm
 
 services:
   harness:
@@ -9,18 +10,19 @@ services:
     image: seyl-ai/app:dev
     command: ["node", "--import", "tsx", "server/harness.ts"]
     environment:
-      OLLAMA_URL: http://host.docker.internal:11434
-    extra_hosts: ["host.docker.internal:host-gateway"]
+      LLM_GATEWAY_URL: http://litellm:4000
+      LITELLM_KEY_HARNESS: ${LITELLM_KEY_HARNESS}
     volumes:
       - opencode-data:/data # sessions survive restarts
+    depends_on: [litellm]
     # Not published to the PC: only other containers can talk to the harness.
 
   api:
     image: seyl-ai/app:dev
     environment:
       OPENCODE_URL: http://harness:4097
-      ASR_URL: http://asr:8000
-      TTS_URL: http://tts:8000
+      LLM_GATEWAY_URL: http://litellm:4000
+      LITELLM_KEY_API: ${LITELLM_KEY_API}
     depends_on: [harness]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
@@ -34,23 +36,55 @@ services:
     ports: ["8080:80"]
     depends_on: [api]
 
-  # Speech-to-text (Qwen3-ASR 0.6B, CPU). Published on localhost only, for `npm run dev`.
+  # ── Model side ────────────────────────────────────────────────────────────
+
+  # LiteLLM gateway: the only way to reach a model. Admin UI: http://localhost:4000/ui
+  # (user "admin", password = LITELLM_MASTER_KEY). Published on localhost only.
+  litellm:
+    build: gateway # LiteLLM + gateway/config.yaml baked in
+    image: seyl-ai/gateway:dev
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
+      DATABASE_URL: postgresql://litellm:${POSTGRES_PASSWORD}@db:5432/litellm
+      OLLAMA_API_BASE: http://host.docker.internal:11434/v1
+      ASR_API_BASE: http://asr:8000/v1
+      TTS_API_BASE: http://tts:8000/v1
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    ports: ["127.0.0.1:4000:4000"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  # Postgres for the gateway: virtual keys, spend and request logs.
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - gateway-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d litellm -U litellm"]
+      interval: 2s
+      retries: 15
+
+  # Speech-to-text (Qwen3-ASR 0.6B, CPU). Only the gateway talks to it.
   asr:
     build: voice/asr
     image: seyl-ai/asr:dev
-    ports: ["127.0.0.1:8001:8000"]
     volumes:
       - asr-models:/models # model weights, downloaded once
 
-  # Text-to-speech (Qwen3-TTS 0.6B, CPU).
+  # Text-to-speech (Qwen3-TTS 0.6B, CPU). Only the gateway talks to it.
   tts:
     build: voice/tts
     image: seyl-ai/tts:dev
-    ports: ["127.0.0.1:8002:8000"]
     volumes:
       - tts-models:/models
 
 volumes:
   opencode-data:
+  gateway-db:
   asr-models:
   tts-models:

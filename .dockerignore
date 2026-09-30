@@ -4,3 +4,5 @@ web/dist
 *.log
 k8s
 docker-compose.yml
+.env
+.env.*

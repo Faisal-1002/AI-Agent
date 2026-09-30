@@ -1,0 +1,67 @@
+# The LiteLLM gateway: the only way anything in the cluster reaches a model.
+# Stateless (keys and logs live in Postgres), so it could run several replicas.
+# Not exposed outside the cluster. Admin UI / key setup:
+#   kubectl -n seyl-ai port-forward svc/litellm 4001:4000   →  http://localhost:4001/ui
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: litellm
+  namespace: seyl-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: litellm }
+  template:
+    metadata:
+      labels: { app: litellm }
+    spec:
+      containers:
+        - name: litellm
+          image: seyl-ai/gateway:dev # LiteLLM + gateway/config.yaml
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LITELLM_MASTER_KEY
+              valueFrom:
+                secretKeyRef: { name: seyl-secrets, key: LITELLM_MASTER_KEY }
+            - name: LITELLM_SALT_KEY
+              valueFrom:
+                secretKeyRef: { name: seyl-secrets, key: LITELLM_SALT_KEY }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: seyl-secrets, key: POSTGRES_PASSWORD }
+            # $(VAR) = Kubernetes inserts an env var defined above.
+            - name: DATABASE_URL
+              value: postgresql://litellm:$(POSTGRES_PASSWORD)@db:5432/litellm
+            - name: OLLAMA_API_BASE
+              value: http://host.docker.internal:11434/v1 # Ollama on the host GPU
+            - name: ASR_API_BASE
+              value: http://asr:8000/v1
+            - name: TTS_API_BASE
+              value: http://tts:8000/v1
+          ports:
+            - containerPort: 4000
+          startupProbe: # first start runs database migrations
+            httpGet: { path: /health/liveliness, port: 4000 }
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe: # "ready" = gateway up AND database reachable
+            httpGet: { path: /health/readiness, port: 4000 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health/liveliness, port: 4000 }
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 768Mi }
+            limits: { memory: 1536Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm
+  namespace: seyl-ai
+spec:
+  selector: { app: litellm }
+  ports:
+    - port: 4000
+      targetPort: 4000

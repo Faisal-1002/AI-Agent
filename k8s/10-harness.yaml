@@ -37,8 +37,11 @@ spec:
           imagePullPolicy: IfNotPresent # use the locally built image
           command: ["node", "--import", "tsx", "server/harness.ts"]
           env:
-            - name: OLLAMA_URL
-              value: http://host.docker.internal:11434 # Ollama on your PC
+            - name: LLM_GATEWAY_URL # all model calls go through the gateway
+              value: http://litellm:4000
+            - name: LITELLM_KEY_HARNESS # this pod's own key: chat models only
+              valueFrom:
+                secretKeyRef: { name: seyl-secrets, key: LITELLM_KEY_HARNESS }
           ports:
             - containerPort: 4097
           volumeMounts:

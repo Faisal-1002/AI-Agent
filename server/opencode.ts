@@ -4,6 +4,10 @@ import type { ModelInfo } from "../shared/chat.js";
 
 // Settings come from environment variables so the same code runs locally
 // (defaults below), in Docker Compose and in Kubernetes (see k8s/).
+// Locally, secrets come from .env; containers get them from Compose / a Kubernetes Secret.
+try {
+  process.loadEnvFile();
+} catch {}
 const env = process.env;
 
 // Where the OpenCode harness listens (started by server/harness.ts).
@@ -14,33 +18,36 @@ export const OPENCODE_PORT = Number(env.OPENCODE_PORT ?? 4097);
 // How the backend reaches the harness (e.g. http://harness:4097 in a cluster).
 export const OPENCODE_URL = env.OPENCODE_URL ?? `http://127.0.0.1:${OPENCODE_PORT}`;
 
-// Where Ollama is. From a container, the host PC is host.docker.internal.
-const OLLAMA_URL = env.OLLAMA_URL ?? "http://localhost:11434";
+// The LiteLLM gateway (gateway/config.yaml) — the only way the harness reaches a model.
+// It uses its own key, which may call only the chat models (scripts/gateway-keys.ts).
+export const LLM_GATEWAY_URL = env.LLM_GATEWAY_URL ?? "http://127.0.0.1:4000";
+const HARNESS_KEY = env.LITELLM_KEY_HARNESS;
 
 // The folder the agent is allowed to work in. OpenCode treats it as its "project".
 // This path is sent to the harness, so it must exist where the *harness* runs.
 export const WORKSPACE = env.SEYL_WORKSPACE ?? path.resolve("workspace");
 
-// The models seyl-ai uses, created from the Modelfiles in ollama/ (see README).
-const MAIN_MODEL = "seyl-qwen3.5-9b"; // chat, agent loop, tools, images
-const SMALL_MODEL = "seyl-qwen3.5-0.8b"; // quick jobs such as chat titles
+// Model names as the gateway knows them — not where they run. The gateway maps
+// them to Ollama today; on AWS it could map the same names to Amazon Bedrock.
+const MAIN_MODEL = "qwen3.5-9b"; // chat, agent loop, tools, images
+const SMALL_MODEL = "qwen3.5-0.8b"; // quick jobs such as chat titles
 
-export const MODEL = { providerID: "ollama", modelID: MAIN_MODEL };
-export const MODEL_INFO: ModelInfo = { provider: "Ollama", name: "Qwen3.5 9B" };
+export const MODEL = { providerID: "gateway", modelID: MAIN_MODEL };
+export const MODEL_INFO: ModelInfo = { provider: "LiteLLM", name: "Qwen3.5 9B" };
 
 // OpenCode configuration, passed straight to the `opencode serve` process.
 // Same shape as an opencode.json file.
 export const config: Config = {
   share: "disabled",
   autoupdate: false,
-  model: `ollama/${MAIN_MODEL}`,
+  model: `gateway/${MAIN_MODEL}`,
   // Titles etc. go to a tiny model, so they don't queue behind the main one.
-  small_model: `ollama/${SMALL_MODEL}`,
+  small_model: `gateway/${SMALL_MODEL}`,
   provider: {
-    ollama: {
+    gateway: {
       npm: "@ai-sdk/openai-compatible",
-      name: "Ollama (local)",
-      options: { baseURL: `${OLLAMA_URL}/v1` },
+      name: "LiteLLM gateway",
+      options: { baseURL: `${LLM_GATEWAY_URL}/v1`, apiKey: HARNESS_KEY },
       models: {
         [MAIN_MODEL]: {
           name: "Qwen3.5 9B",
@@ -56,7 +63,7 @@ export const config: Config = {
           tool_call: false,
           limit: { context: 8192, output: 512 },
           // Qwen3.5 thinks by default; for a title that just burns the token budget.
-          // Sent to Ollama as reasoning_effort: "none".
+          // Sent as reasoning_effort: "none" (the gateway passes it on to Ollama).
           options: { reasoningEffort: "none" },
         },
       },

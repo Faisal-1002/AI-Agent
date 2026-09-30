@@ -12,16 +12,19 @@ seyl-ai backend (Hono)        localhost:3000   server/       my code: sessions, 
    │  @opencode-ai/sdk
    ▼
 OpenCode harness              localhost:4097   server/harness.ts   agent loop, tools, permissions
-   │  OpenAI-compatible API
+   │  OpenAI-compatible API, key "harness"     (the backend's voice routes use key "api-voice")
    ▼
-Ollama runtime                localhost:11434                inference
+LiteLLM gateway               localhost:4000   gateway/      one front door to every model
    │
-   ├─▶ Qwen3.5 9B   (GPU, 32k context)          main model: agent loop, tools, images
-   └─▶ Qwen3.5 0.8B (CPU, no thinking)          small model: chat titles
+   ├─▶ Ollama (host)  ─▶ Qwen3.5 9B   (GPU, 32k context)   main model: agent loop, tools, images
+   │                  └▶ Qwen3.5 0.8B (CPU, no thinking)   small model: chat titles
+   ├─▶ voice/asr      ─▶ Qwen3-ASR 0.6B (CPU)              speech-to-text
+   └─▶ voice/tts      ─▶ Qwen3-TTS 0.6B (CPU)              text-to-speech
 ```
 
-- **Models** — Qwen3.5 9B is the "brain"; Qwen3.5 0.8B handles quick jobs (OpenCode's `small_model`). Just weights; they can't run on their own.
-- **Ollama** — the runtime that loads the weights onto the GPU and serves them over HTTP.
+- **Models** — Qwen3.5 9B is the "brain"; Qwen3.5 0.8B handles quick jobs (OpenCode's `small_model`); Qwen3-ASR/TTS are the voice. Just weights; they can't run on their own.
+- **Ollama** — the runtime that loads the chat weights onto the GPU and serves them over HTTP.
+- **LiteLLM** — the model gateway: one OpenAI-compatible API, per-consumer keys, usage logs (see [Gateway](#gateway)).
 - **OpenCode** — the harness: runs the agent loop (model → tool call → result → model …), provides tools (read, grep, glob, …), and enforces permissions.
 - **Backend** — conversations (= OpenCode sessions), prompts, stop, history, and a live event stream; translates OpenCode's data into a small model the UI understands (`server/translate.ts`, types in `shared/chat.ts`).
 - **Web UI** — a chat app in the style of LibreChat: conversation sidebar, streamed markdown replies, collapsible "Thoughts" and tool calls (with their input and output), stop button, light/dark theme.
@@ -45,6 +48,9 @@ ollama create seyl-qwen3.5-9b -f ollama/qwen3.5-9b.Modelfile
 ollama create seyl-qwen3.5-0.8b -f ollama/qwen3.5-0.8b.Modelfile
 ```
 
+Secrets: copy `.env.example` to `.env` and fill in long random values. `.env` is git-ignored; nothing
+secret is committed.
+
 ### Models
 
 | Model | Where | Speed (RTX 3080) | Why |
@@ -58,13 +64,39 @@ small helpers on the CPU. Check with `ollama ps` (PROCESSOR column) and `nvidia-
 
 ## Run
 
+The app runs locally; the model side (gateway, its database, voice services) runs in Docker:
+
 ```bash
+docker compose up -d litellm asr tts
+npm run gateway:keys
 npm run dev
 ```
 
 Then open http://localhost:5173 and ask something like *"Read notes.md and tell me the project codename."*
+`npm run gateway:keys` registers the per-consumer keys from `.env` in the gateway (safe to re-run).
 
-Voice is optional; to use it with `npm run dev`, start the voice containers: `docker compose up -d asr tts`.
+## Gateway
+
+Every model call goes through **LiteLLM** (`gateway/config.yaml`). Consumers know only the gateway URL
+and model *names* (`qwen3.5-9b`, `qwen3.5-0.8b`, `qwen3-asr`, `qwen3-tts`) — not where the models run.
+Moving a model (say, Ollama → Amazon Bedrock) is a change to that one file.
+
+| Key (from `.env`) | Alias | May use | Used by |
+|---|---|---|---|
+| `LITELLM_KEY_HARNESS` | `harness` | `qwen3.5-9b`, `qwen3.5-0.8b` | the OpenCode harness |
+| `LITELLM_KEY_API` | `api-voice` | `qwen3-asr`, `qwen3-tts` (60 requests/min) | the backend's voice routes |
+| `LITELLM_MASTER_KEY` | admin | everything | only `scripts/gateway-keys.ts` and the admin UI |
+
+- **Least privilege**: the harness key calling a voice model → `403`; the voice key calling chat → `403`; no key → `401`.
+- **Usage logs** per key and model live in Postgres. Admin UI: http://localhost:4000/ui (user `admin`,
+  password = `LITELLM_MASTER_KEY`). In Kubernetes: `kubectl -n seyl-ai port-forward svc/litellm 4001:4000`,
+  then http://localhost:4001/ui.
+- The logs make the cost of an **agent loop** visible: one question with a tool call was 2–4 calls to
+  the 9B and ~11k prompt tokens, because each step re-sends the conversation, system prompt and tool list.
+- LiteLLM normalizes Ollama's `reasoning` stream field to the standard `reasoning_content`, so "Thoughts" keep streaming.
+- The config is **baked into the gateway image** (`gateway/Dockerfile`), secrets are not — they arrive as
+  environment variables. (Also a workaround: Docker Desktop can't bind-mount files from this app's
+  virtualized folder.)
 
 ## Voice
 
@@ -74,8 +106,8 @@ Voice is optional; to use it with `npm run dev`, start the voice containers: `do
 ```
 
 - Each voice model is a small Python (FastAPI) service in its own container — `voice/asr`, `voice/tts` — with an
-  **OpenAI-compatible** API (`/v1/audio/transcriptions`, `/v1/audio/speech`), so it could later be swapped for a
-  hosted service or put behind a gateway like LiteLLM. Ollama can't serve audio models.
+  **OpenAI-compatible** API (`/v1/audio/transcriptions`, `/v1/audio/speech`), and sit behind the [gateway](#gateway)
+  like every other model. Ollama can't serve audio models.
 - They run on the **CPU**: the GPU is reserved for the chat model. Models download from Hugging Face on first start
   (ASR ~1.9 GB, TTS ~2.5 GB) into a volume.
 - The UI shows the buttons only when `/api/voice/status` says the services are up.
@@ -115,7 +147,7 @@ Browser ──► │ web ×2 (nginx)  ──/api──►  api ×2  ──►  
             └────────────────────────────────────────────────────────┘
 ```
 
-Four images:
+Five images:
 
 | Image | Built from | Runs |
 |---|---|---|
@@ -123,25 +155,38 @@ Four images:
 | `seyl-ai/web:dev` | `deploy/web.Dockerfile` | nginx serving the built UI, proxying `/api` → `api:3000` (`deploy/nginx.conf`) |
 | `seyl-ai/asr:dev` | `voice/asr/Dockerfile` | speech-to-text service (Python, CPU PyTorch, ffmpeg) |
 | `seyl-ai/tts:dev` | `voice/tts/Dockerfile` | text-to-speech service (Python, CPU PyTorch) |
+| `seyl-ai/gateway:dev` | `gateway/Dockerfile` | LiteLLM with `gateway/config.yaml` baked in |
 
-Docker Desktop needs ~12 GB of its memory for everything (the voice models take ~4.5 GB each).
+Plus `postgres:16` for the gateway.
+
+Docker Desktop needs ~12 GB of its memory for everything (the voice models take ~4.5 GB each, LiteLLM ~0.8 GB).
+Run the stack in Compose **or** Kubernetes, not both at once.
 
 ### Docker Compose
 
 ```bash
 docker compose up --build -d
+npm run gateway:keys
 ```
 
 Open http://localhost:8080. Stop with `docker compose down` (chats are kept in the `opencode-data` volume).
 
 ### Kubernetes (Docker Desktop)
 
-Enable Kubernetes in Docker Desktop (kubeadm), build the images, then:
+Enable Kubernetes in Docker Desktop (kubeadm), build the images, then deploy with Kustomize
+(`kustomization.yaml`), which also turns `.env` into a Kubernetes Secret:
 
 ```bash
 docker compose build
-kubectl apply -f k8s/
+kubectl apply -k .
 kubectl -n seyl-ai get pods,svc
+```
+
+The in-cluster gateway has its own database, so register the keys once, through a port-forward:
+
+```bash
+kubectl -n seyl-ai port-forward svc/litellm 4001:4000
+GATEWAY_URL=http://127.0.0.1:4001 npm run gateway:keys
 ```
 
 Open http://localhost:8080. Things to try:
@@ -162,6 +207,9 @@ After changing code: `docker compose build` then `kubectl -n seyl-ai rollout res
 | `k8s/20-api.yaml` | api Deployment (2 replicas) with readiness + liveness probes on `/api/healthz`, `preStop` pause, ClusterIP Service |
 | `k8s/30-web.yaml` | web Deployment (2 replicas), `preStop` pause, LoadBalancer Service on port 8080 |
 | `k8s/40-asr.yaml`, `k8s/50-tts.yaml` | voice Deployments (1 replica each) with a 5 GiB volume for the model, a `startupProbe` that allows 10 min for the first download, memory limits sized from peak usage |
+| `k8s/60-postgres.yaml` | Postgres for the gateway (1 replica, 2 GiB volume); on AWS this would be a managed database (RDS) |
+| `k8s/70-litellm.yaml` | the gateway: secrets from the Secret, `DATABASE_URL` composed with `$(POSTGRES_PASSWORD)`, readiness = gateway + database up, not exposed outside the cluster |
+| `kustomization.yaml` | lists the manifests; generates the `seyl-secrets` Secret from `.env` (hash-suffixed name, references rewritten) |
 
 Lessons learned while testing rollouts (hammering the API during `rollout restart`):
 
@@ -170,16 +218,18 @@ Lessons learned while testing rollouts (hammering the API during `rollout restar
 
 ### Configuration
 
-All settings are environment variables with local-dev defaults (`server/opencode.ts`, `server/index.ts`):
+All settings are environment variables with local-dev defaults (`server/opencode.ts`, `server/index.ts`).
+Locally, `.env` is loaded automatically; containers get variables from Compose or the Kubernetes Secret.
+The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (`OLLAMA_API_BASE`, `ASR_API_BASE`, `TTS_API_BASE`).
 
 | Variable | Default | Used by |
 |---|---|---|
 | `PORT` | `3000` | api |
 | `OPENCODE_URL` | `http://127.0.0.1:4097` | api → harness |
 | `OPENCODE_HOSTNAME` / `OPENCODE_PORT` | `127.0.0.1` / `4097` | harness |
-| `OLLAMA_URL` | `http://localhost:11434` | harness → Ollama |
+| `LLM_GATEWAY_URL` | `http://127.0.0.1:4000` | harness and api → LiteLLM |
+| `LITELLM_KEY_HARNESS` / `LITELLM_KEY_API` | from `.env` | each consumer's gateway key |
 | `SEYL_WORKSPACE` | `./workspace` | folder the agent works in (path inside the harness) |
-| `ASR_URL` / `TTS_URL` | `http://127.0.0.1:8001` / `:8002` | api → voice services |
 | `TTS_VOICE` | `Aiden` | api: voice used for read-aloud |
 | `TORCH_THREADS` | `8` (asr) / `4` (tts) | voice services: CPU threads |
 
@@ -195,6 +245,8 @@ All settings are environment variables with local-dev defaults (`server/opencode
 | `shared/chat.ts` | Types shared by backend and UI |
 | `shared/speech.ts` | Markdown → speakable text, split into sentence chunks |
 | `voice/asr/`, `voice/tts/` | The voice services (Python + Dockerfile each) |
+| `gateway/` | LiteLLM config (model list) + Dockerfile |
+| `scripts/gateway-keys.ts` | Registers the per-consumer gateway keys (`npm run gateway:keys`) |
 | `web/src/App.tsx` | Page layout: sidebar + chat |
 | `web/src/hooks/` | `useChat` (history, live events, send, stop), `useConversations`, … |
 | `web/src/lib/` | API client, chat reducer, date grouping — plain functions, no React |

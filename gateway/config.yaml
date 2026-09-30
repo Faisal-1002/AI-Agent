@@ -1,0 +1,52 @@
+# LiteLLM gateway: one OpenAI-compatible API in front of every model seyl-ai uses.
+# Consumers only know the gateway and the model NAMES below — not where the models run.
+# Moving a model (e.g. Ollama → Amazon Bedrock on AWS) means editing only this file.
+#
+# Backend addresses come from environment variables (set in docker-compose.yml / k8s/).
+
+model_list:
+  # Chat — served by Ollama on the host GPU (its OpenAI-compatible /v1 API).
+  - model_name: qwen3.5-9b
+    litellm_params:
+      model: openai/seyl-qwen3.5-9b
+      api_base: os.environ/OLLAMA_API_BASE
+      api_key: ollama # Ollama ignores it; the OpenAI client requires one
+    model_info:
+      mode: chat
+      supports_function_calling: true
+      supports_reasoning: true
+      supports_vision: true
+
+  - model_name: qwen3.5-0.8b
+    litellm_params:
+      model: openai/seyl-qwen3.5-0.8b
+      api_base: os.environ/OLLAMA_API_BASE
+      api_key: ollama
+    model_info:
+      mode: chat
+
+  # Speech-to-text — our voice/asr service (OpenAI /v1/audio/transcriptions).
+  - model_name: qwen3-asr
+    litellm_params:
+      model: openai/qwen3-asr
+      api_base: os.environ/ASR_API_BASE
+      api_key: none
+    model_info:
+      mode: audio_transcription
+
+  # Text-to-speech — our voice/tts service (OpenAI /v1/audio/speech).
+  - model_name: qwen3-tts
+    litellm_params:
+      model: openai/qwen3-tts
+      api_base: os.environ/TTS_API_BASE
+      api_key: none
+    model_info:
+      mode: audio_speech
+
+litellm_settings:
+  request_timeout: 600 # local models on a CPU can be slow; don't give up early
+  num_retries: 0 # a retried agent step would run the whole generation twice
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY # admin key; apps get their own virtual keys
+  database_url: os.environ/DATABASE_URL # keys, spend and request logs live in Postgres

@@ -1,0 +1,22 @@
+# Deploy everything to Kubernetes:   kubectl apply -k .
+#
+# Kustomize bundles the manifests in k8s/ and turns .env (git-ignored) into a
+# Secret, so secrets never live in Git or in YAML. The Secret's name gets a hash
+# suffix (seyl-secrets-abc123) and every reference to it is rewritten — so
+# changing a secret automatically rolls out the pods that use it.
+namespace: seyl-ai
+
+resources:
+  - k8s/00-namespace.yaml
+  - k8s/10-harness.yaml
+  - k8s/20-api.yaml
+  - k8s/30-web.yaml
+  - k8s/40-asr.yaml
+  - k8s/50-tts.yaml
+  - k8s/60-postgres.yaml
+  - k8s/70-litellm.yaml
+
+secretGenerator:
+  - name: seyl-secrets
+    envs:
+      - .env

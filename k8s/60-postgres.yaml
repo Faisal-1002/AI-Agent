@@ -1,0 +1,69 @@
+# Postgres for the LiteLLM gateway (virtual keys, spend and request logs).
+# One replica with a persistent volume — a real deployment would use a managed
+# database instead (on AWS: Amazon RDS / Aurora).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gateway-db
+  namespace: seyl-ai
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+  namespace: seyl-ai
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: db }
+  template:
+    metadata:
+      labels: { app: db }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          env:
+            - name: POSTGRES_DB
+              value: litellm
+            - name: POSTGRES_USER
+              value: litellm
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: seyl-secrets, key: POSTGRES_PASSWORD }
+            - name: PGDATA # a subfolder: the volume's root may contain lost+found
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "litellm", "-d", "litellm"]
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: gateway-db
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: seyl-ai
+spec:
+  selector: { app: db }
+  ports:
+    - port: 5432
+      targetPort: 5432
