@@ -118,6 +118,12 @@ Moving a model (say, Ollama → Amazon Bedrock) is a change to that one file.
   `/llm/v1/chat/completions`, `/llm/v1/models` and `/llm/v1/embeddings` at http://localhost:8080/llm/v1, each
   needing a key. LiteLLM's admin, key, team, UI and SSO routes return 404 from outside (traversal tricks too),
   and the browser's session cookie is never forwarded to the gateway.
+- **The safety filter runs inside the gateway too** (`gateway/seyl_guard.py`, a LiteLLM custom guardrail on its
+  MIT path, `default_on`, before every call). Same Qwen3Guard model, same official template
+  (`server/guard-template.json`, copied into the image), same policy (Unsafe or Jailbreak → blocked, fail
+  closed), so apps that talk to the gateway directly are screened like the web app. Skipped for the internal
+  keys (the api already screened the web app's messages) and for agent steps that only carry tool results.
+  Tested: a jailbreak from a device key → `400` "Seyl can't help with that: the safety filter flagged it (Violent)".
 
 ## Safety
 
@@ -319,6 +325,21 @@ secrets in the file). Seyl stores only hashes; **Disconnect** revokes the key an
 - `npm run devices:test` checks 17 things with two temporary users: what the key and token may and may not do,
   that another user can't see or revoke the device, the anti-CSRF guard, and that revoking works instantly.
 - Still shared: the document library (per-user libraries come with tenancy).
+- **The generated config is locked down**: `enabled_providers: ["seyl"]` (no other provider can be used),
+  `share: "disabled"`, and the agent asks before running commands, editing files or fetching web pages.
+
+Lessons learned (from the first end-to-end test with the plain OpenCode CLI):
+
+- **A silent fallback is a data leak.** The first test config didn't restrict providers. When OpenCode couldn't
+  use the Seyl provider, it fell back — without any error — to **its own free cloud model** and kept working:
+  22 tool calls in the repo folder, sending source files, local service names and document-search results to a
+  third party. No secret values were sent (checked: none of the `.env` values appears in the session data);
+  the internal MCP token, which that agent had used locally, was rotated anyway. Now the config allows only Seyl.
+- **OpenCode takes its working folder from `PWD`**, not just the process's directory: started from a script
+  in the repo, it worked in the repo. The test harness now sets `PWD` explicitly.
+- Verified after the fix: the CLI used `seyl/qwen3.5-9b` in its own folder, and a jailbreak was stopped by
+  Seyl's gateway guard. Still to tune: OpenCode's default `build` agent (large coding prompt, all tools,
+  thinking) is slow on the local 9B — a question timed out at 4 minutes.
 
 ## Approvals
 

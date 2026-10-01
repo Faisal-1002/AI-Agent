@@ -18,5 +18,8 @@ RUN rm -rf /app/enterprise \
  && ! python -c "import enterprise" 2>/dev/null \
  && python -c "import litellm.proxy.proxy_server as p; assert p.enterprise_proxy_config is None, 'enterprise code still loaded'"
 
-COPY config.yaml /app/config.yaml
+# Built from the repo root, so the guard uses the very same prompt template as the api.
+COPY gateway/config.yaml /app/config.yaml
+COPY gateway/seyl_guard.py /app/seyl_guard.py
+COPY server/guard-template.json /app/guard-template.json
 CMD ["--config", "/app/config.yaml", "--port", "4000"]

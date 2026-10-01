@@ -68,6 +68,15 @@ model_list:
     model_info:
       mode: audio_speech
 
+# Seyl's safety filter on every chat call from outside apps (gateway/seyl_guard.py): the same
+# Qwen3Guard check the api runs for the web app, so connected devices are screened too.
+guardrails:
+  - guardrail_name: seyl-guard
+    litellm_params:
+      guardrail: seyl_guard.SeylGuard # gateway/seyl_guard.py, next to this file in the image
+      mode: pre_call
+      default_on: true
+
 litellm_settings:
   request_timeout: 600 # local models on a CPU can be slow; don't give up early
   num_retries: 0 # a retried agent step would run the whole generation twice

@@ -53,7 +53,7 @@ services:
   # LiteLLM gateway: the only way to reach a model. Admin UI: http://localhost:4000/ui
   # (user "admin", password = LITELLM_MASTER_KEY). Published on localhost only.
   litellm:
-    build: gateway # LiteLLM + gateway/config.yaml baked in
+    build: { context: ., dockerfile: gateway/Dockerfile } # LiteLLM + gateway/config.yaml + the Seyl guard
     image: seyl-ai/gateway:dev
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
