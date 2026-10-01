@@ -14,6 +14,7 @@ services:
       LITELLM_KEY_HARNESS: ${LITELLM_KEY_HARNESS}
       SEYL_MCP_URL: http://api:3001/mcp # the api's MCP tool server (its own port, not published)
       SEYL_MCP_TOKEN: ${SEYL_MCP_TOKEN}
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD}
     volumes:
       - opencode-data:/data # sessions survive restarts
       - workspace:/workspace # files the agent may edit (Docker seeds it from the image the first time)
@@ -30,6 +31,7 @@ services:
       SEYL_DB_HOST: db
       SEYL_DB_PASSWORD: ${SEYL_DB_PASSWORD}
       SEYL_MCP_TOKEN: ${SEYL_MCP_TOKEN}
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD}
       AUTH_ENABLED: "true"
       SEYL_PUBLIC_URL: http://localhost:8080
       OIDC_INTERNAL_ISSUER: http://keycloak:8080/auth/realms/seyl

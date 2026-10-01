@@ -1,0 +1,75 @@
+# Seyl CI: every push to main and every pull request runs these checks on GitHub's machines.
+# Nothing here needs the running stack (no models, no Keycloak, no cluster) — the integration
+# tests (auth:test, devices:test, guard:eval) still run locally against the live stack.
+#
+# Pushes to other branches don't run it (e.g. the copy in seyl-ai/openwork), so CI minutes are
+# only spent on what is about to land.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read # read the code, nothing else
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  code:
+    name: Typecheck, tests, build, licenses
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run license:check
+      - name: Python files compile (gateway guard, voice services)
+        run: python3 -m py_compile gateway/seyl_guard.py voice/lazy_model.py voice/asr/server.py voice/tts/server.py
+      - name: Kubernetes manifests render
+        run: cp .env.example .env && kubectl kustomize . > /dev/null
+
+  secrets:
+    name: Secret scan (whole history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0, persist-credentials: false }
+      # The gitleaks CLI in its official image (MIT). The gitleaks GitHub Action needs a paid
+      # license for organisation repos; the CLI doesn't.
+      - name: gitleaks
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --redact --no-banner --verbose
+
+  images:
+    name: Docker images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - name: app (harness + api)
+        run: docker build -f deploy/app.Dockerfile -t seyl-ai/app:ci .
+      - name: web (UI + nginx edge)
+        run: docker build -f deploy/web.Dockerfile -t seyl-ai/web:ci .
+      - name: nginx config is valid
+        # nginx resolves upstream names at start; point them anywhere for the syntax check.
+        run: >
+          docker run --rm --add-host api:127.0.0.1 --add-host litellm:127.0.0.1 --add-host keycloak:127.0.0.1
+          seyl-ai/web:ci nginx -t
+      - name: gateway (fails if LiteLLM's proprietary enterprise code is still importable)
+        run: docker build -f gateway/Dockerfile -t seyl-ai/gateway:ci .
+      - name: keycloak (+ login theme)
+        run: docker build -f deploy/keycloak.Dockerfile -t seyl-ai/keycloak:ci .
+      # The voice images (asr, tts) are left out: several GB of PyTorch for little signal.

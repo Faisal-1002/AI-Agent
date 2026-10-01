@@ -82,5 +82,20 @@ export async function migrate() {
         revoked_at       timestamptz
       )`;
     await tx`CREATE INDEX IF NOT EXISTS devices_owner_idx ON devices (owner)`;
+
+    // "Allow for this chat" rules, one conversation at a time (server/approvals.ts).
+    await tx`
+      CREATE TABLE IF NOT EXISTS approval_rules (
+        session_id text NOT NULL,
+        permission text NOT NULL,
+        patterns   text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (session_id, permission, patterns)
+      )`;
   });
+
+  // The audit log is NOT created here: the api's own user may only add and read rows, so it
+  // can't create (or alter) the table either. scripts/db-setup.ts does, under its own owner.
+  const [{ exists }] = await sql<{ exists: boolean }[]>`SELECT to_regclass('audit.log') IS NOT NULL AS exists`;
+  if (!exists) console.warn("[audit] no audit log yet: run npm run db:setup (actions are not being recorded)");
 }

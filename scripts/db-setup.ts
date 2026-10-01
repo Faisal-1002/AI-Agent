@@ -7,7 +7,8 @@
 // login role and its own database — so no app ever runs with admin rights:
 //   - seyl      (SEYL_DB_PASSWORD)      documents + vectors; gets the pgvector extension
 //   - keycloak  (KEYCLOAK_DB_PASSWORD)  the identity provider's users, clients, sessions
-// The apps create their own tables at startup.
+// The apps create their own tables at startup — except the audit log (below), which the api
+// must not own.
 
 import postgres from "postgres";
 
@@ -47,4 +48,66 @@ for (const app of APPS) {
     await adminOnApp.end();
   }
 }
+
+// The audit log (server/audit.ts): its own schema, owned by a role nobody logs in as, so the
+// api's "seyl" user can only add and read rows — not change, delete or drop them, and not switch
+// off the trigger that refuses changes (only an owner could; "seyl" owns the database, so a
+// table in its "public" schema could be dropped — hence a separate schema).
+const [auditRole] = await admin`SELECT 1 FROM pg_roles WHERE rolname = 'seyl_audit'`;
+if (!auditRole) await admin.unsafe("CREATE ROLE seyl_audit NOLOGIN");
+const adminOnSeyl = postgres({ host, port, user: "litellm", password: adminPassword, database: "seyl", onnotice: () => {} });
+await adminOnSeyl.begin(async (tx) => {
+  await tx.unsafe("CREATE SCHEMA IF NOT EXISTS audit AUTHORIZATION seyl_audit");
+  await tx.unsafe("SET LOCAL ROLE seyl_audit"); // everything below belongs to seyl_audit
+  await tx.unsafe(`
+    CREATE TABLE IF NOT EXISTS audit.log (
+      id     bigserial PRIMARY KEY,
+      at     timestamptz NOT NULL DEFAULT now(),
+      actor  text NOT NULL,
+      action text NOT NULL,
+      target text,
+      detail jsonb
+    )`);
+  await tx.unsafe("CREATE INDEX IF NOT EXISTS log_actor_at_idx ON audit.log (actor, at DESC)");
+  await tx.unsafe(`
+    CREATE OR REPLACE FUNCTION audit.append_only() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN RAISE EXCEPTION 'the audit log is append-only'; END $$`);
+  await tx.unsafe("CREATE OR REPLACE TRIGGER no_change BEFORE UPDATE OR DELETE ON audit.log FOR EACH ROW EXECUTE FUNCTION audit.append_only()");
+  await tx.unsafe("CREATE OR REPLACE TRIGGER no_truncate BEFORE TRUNCATE ON audit.log FOR EACH STATEMENT EXECUTE FUNCTION audit.append_only()");
+  await tx.unsafe("REVOKE ALL ON SCHEMA audit FROM PUBLIC");
+  await tx.unsafe("REVOKE ALL ON audit.log FROM PUBLIC");
+  await tx.unsafe("GRANT USAGE ON SCHEMA audit TO seyl");
+  await tx.unsafe("GRANT SELECT, INSERT ON audit.log TO seyl");
+  await tx.unsafe("GRANT USAGE ON SEQUENCE audit.log_id_seq TO seyl");
+});
+await adminOnSeyl.end();
+
+// Prove it, as the api's user: adding works; every way of rewriting history is refused.
+// (All inside one transaction that is rolled back, so the check leaves no trace.)
+const asApi = postgres({ host, port, user: "seyl", password: APPS[0].password, database: "seyl", onnotice: () => {} });
+const ROLLBACK = new Error("rollback");
+const refused: string[] = [];
+await asApi
+  .begin(async (tx) => {
+    await tx`INSERT INTO audit.log (actor, action) VALUES ('db-setup', 'setup.check')`;
+    for (const statement of [
+      "UPDATE audit.log SET actor = 'someone else'",
+      "DELETE FROM audit.log",
+      "TRUNCATE audit.log",
+      "ALTER TABLE audit.log DISABLE TRIGGER ALL",
+      "DROP TABLE audit.log",
+      "DROP SCHEMA audit CASCADE",
+    ]) {
+      const allowed = await tx.savepoint((sp) => sp.unsafe(statement)).then(() => true, () => false);
+      if (allowed) throw new Error(`the api's database user could run: ${statement}`);
+      refused.push(statement.split(" ").slice(0, 2).join(" "));
+    }
+    throw ROLLBACK;
+  })
+  .catch((err) => {
+    if (err !== ROLLBACK) throw err;
+  });
+await asApi.end();
+console.log(`✓ audit log: the api can add and read; refused ${refused.join(", ")}`);
+
 await admin.end();

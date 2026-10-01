@@ -59,6 +59,9 @@ spec:
             - name: SEYL_MCP_TOKEN
               valueFrom:
                 secretKeyRef: { name: seyl-secrets, key: SEYL_MCP_TOKEN }
+            - name: OPENCODE_SERVER_PASSWORD # OpenCode requires it on every request; only the api has it
+              valueFrom:
+                secretKeyRef: { name: seyl-secrets, key: OPENCODE_SERVER_PASSWORD }
           ports:
             - containerPort: 4097
           volumeMounts:

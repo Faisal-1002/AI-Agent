@@ -228,7 +228,7 @@ Lessons learned:
 - **Without thinking, the model skipped the lookup.** With *Think* off (the fast default), "what do my documents
   say?" was answered from the file *names* — or with an invented `contract.pdf` (the example name in our own system
   prompt!). With thinking on it searched every time (6/6). Now example names are gone from the prompt, and
-  questions that mention files or documents always think first (`shouldThink` in `server/index.ts`).
+  questions that mention files or documents always think first (`shouldThink` in `server/think.ts`).
 
 ## Login
 
@@ -273,7 +273,8 @@ compared seyl-ai against it, the browser-app BFF draft and the security BCP (RFC
 | **Met** (tested live) | code flow + PKCE S256 (no-PKCE and "plain" rejected), no implicit / password grant, exact redirect URIs (6 variants rejected), state + nonce, issuer check incl. the `iss` parameter, tokens never in the browser |
 | **Fixed after the audit** | open redirect in `returnTo` (`/\evil.example` counted as a local path — now resolved like a browser and compared by origin); ID token signature now checked; wildcard logout redirect → exact; OAuth 2.1 rules as a Keycloak **client policy for every client** (PKCE S256, no implicit, no password grant — Keycloak's own `admin-cli` allowed the password grant); refresh tokens single-use |
 | **Also fixed** | `/mcp` reachable through nginx (see Documents); admin console + admin realm no longer published; nginx answers only for `localhost`/`127.0.0.1` (stops DNS rebinding — not a network boundary, see below); CSRF protection (`server/csrf.ts`: every change needs the `X-Seyl-Csrf` header, which other sites can't send); security headers (CSP, no framing); approvals bound to their conversation; the api refuses weak or missing secrets and a mistyped `AUTH_ENABLED` |
-| **For AWS** | HTTPS everywhere (OAuth 2.1 requires it); a password on the OpenCode harness + network policies; per-user documents and workspaces; "Allow for this chat" is instance-wide in OpenCode; back-channel logout; `private_key_jwt` client auth |
+| **Since then** | a password on the OpenCode harness (the api signs every call; without it, anything that reached the harness could drive the agent); "Allow for this chat" really per chat (see [Approvals](#approvals)); an append-only [audit log](#audit-log) |
+| **For AWS** | HTTPS everywhere (OAuth 2.1 requires it); network policies (only the api may reach the harness); per-user documents and workspaces; back-channel logout; `private_key_jwt` client auth |
 
 **Other devices on your network**: Compose publishes the app on `127.0.0.1` only. Docker Desktop's Kubernetes
 LoadBalancer, though, listens on every network interface, and Docker's own firewall rule allows inbound traffic —
@@ -356,6 +357,15 @@ you: Allow once / Allow for this chat / Deny ──► POST /api/conversations/:
 | edit / write (change or create a file) | **ask** | shows the diff, waits for your answer |
 | bash, web, sub-agents, outside the workspace | deny | not even offered to the model |
 
+- **Allow for this chat** means this chat: the api stores the approval for that one conversation
+  (`server/approvals.ts`) and answers OpenCode "once"; later requests of the same kind *in that conversation*
+  are approved by the api — also when nobody has that chat open (each api process watches for them) — everywhere
+  else you're asked again. Deleting the conversation deletes its rules.
+- **The workspace can't change the rules.** OpenCode normally also loads `opencode.json`, `.opencode/` (agents,
+  plugins, MCP servers) and `AGENTS.md` from the project folder — here the workspace, which the agent writes to.
+  One approved edit there would have changed the rules for every user, or run code in the harness. The harness
+  turns that off (`OPENCODE_DISABLE_PROJECT_CONFIG`) and its startup check also refuses MCP servers that aren't ours.
+- Every answer — yours or automatic — goes into the [audit log](#audit-log).
 - Pending approvals survive a page reload (the api lists them from OpenCode).
 - The workspace is on a persistent volume, so approved changes survive restarts; an `initContainer` seeds it from
   the image once (`cp -n` never overwrites your edits).
@@ -369,10 +379,34 @@ Lessons learned:
   **no approval**. Found only by reading the *effective* config back from the running harness. Now the rules are
   written as permissions, and **the harness checks them at startup and refuses to run if they're wrong**
   (`server/harness.ts`) — policy as a test, not as hope.
+- **"Always" meant everyone.** OpenCode's own "always" reply adds an allow rule to the *whole harness* — every
+  conversation of every user, until it restarts — and for edits its pattern is `*`. One "Allow for this chat"
+  would have let the agent change files in everybody's chats without asking. So Seyl never sends "always".
 - **This is why you review diffs**: asked to add one line, the model also changed the line above (a stray space).
 - **Small models copy line numbers**: `read` shows lines as `6: text`; the model put `6:` into the text to
   replace, so `edit` failed four times — then it rewrote the whole file with `write`. The system prompt now says
   line numbers aren't part of the file and how to append.
+
+## Audit log
+
+Who did what, and when — in the `audit.log` table (`server/audit.ts`): sign-in and sign-out, devices connected
+and disconnected, every approval answer (once / this chat / automatic / deny), documents uploaded and deleted,
+conversations deleted, and messages the safety filter blocked. Only actions and ids — never message text or secrets.
+
+**Append-only, enforced by the database**: the api's database user may only `INSERT` and `SELECT` there. The
+`audit` schema and its table belong to a separate role (`seyl_audit`, nobody logs in as it), and a trigger refuses
+`UPDATE`, `DELETE` and `TRUNCATE` even if someone grants them later — so neither a bug nor an injected query can
+rewrite history. `npm run db:setup` creates it and then proves it: as the api's user it tries `UPDATE`, `DELETE`,
+`TRUNCATE`, disabling the trigger, `DROP TABLE` and `DROP SCHEMA` — all must fail. (A database admin still could;
+a hosted Seyl would ship the log to a separate store.) Writing to it never fails the action itself — a failed write
+is logged, and the api warns at startup if the log is missing.
+
+```bash
+kubectl -n seyl-ai exec deploy/db -- psql -U seyl -d seyl -c "SELECT at, actor, action, target FROM audit.log ORDER BY at DESC LIMIT 20"
+```
+
+Lesson learned: the first version created the table at api startup — so the api's user *owned* it, and an owner can
+simply drop the trigger. Append-only has to be enforced against the one who writes, not just by a trigger.
 
 ## Images
 
@@ -597,6 +631,30 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `KEYCLOAK_URL` | port-forward to `127.0.0.1:8081/auth` | scripts: Keycloak's admin API |
 | `LITELLM_ADMIN_KEY` | from `LITELLM_MASTER_KEY` | api: creates and revokes device keys |
 | `SEYL_MCP_TOKEN` | from `.env` | harness ↔ api: bearer token for `/mcp` |
+| `OPENCODE_SERVER_PASSWORD` / `OPENCODE_SERVER_USERNAME` | from `.env` / `seyl-api` | harness ↔ api: HTTP Basic auth on the harness (containers refuse to start with fewer than 32 characters) |
+
+## Tests and CI
+
+```bash
+npm test
+```
+
+Unit tests (`tests/`, Node's own test runner) for the logic that needs no running stack — each case once was,
+or could become, a real bug: the open-redirect bypasses the audits found, the CSRF guard, "Allow for this chat"
+rules, the guard's verdict parsing, file names in the model's note, which questions think first, and the device
+config (locked to Seyl, no secrets in the file).
+
+On every push to `main` and every pull request, GitHub runs `.github/workflows/ci.yml`:
+
+| Job | Checks |
+|---|---|
+| Typecheck, tests, build, licenses | `tsc`, `npm test`, `vite build`, `npm run license:check`, the Python files compile, the Kubernetes manifests render |
+| Secret scan | gitleaks over the **whole** Git history (the repo is public) |
+| Docker images | app, web (+ `nginx -t`), keycloak, and the gateway — whose build fails if LiteLLM's proprietary enterprise code is still importable |
+
+`npm run license:check` reads every npm package's license from `package-lock.json` and fails on anything that
+isn't permissive (MIT, Apache-2.0, BSD, ISC, …); MPL-2.0 is accepted only for build tools that never ship.
+The integration tests (`auth:test`, `devices:test`, `guard:eval`) need the running stack, so they stay local.
 
 ## Project layout
 
@@ -618,9 +676,15 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `scripts/guard-eval.ts` | Safety filter evaluation (`npm run guard:eval`) |
 | `server/documents.ts`, `server/chunk.ts`, `server/db.ts` | Document library: extraction, chunking, embeddings, pgvector search; database connection + tables |
 | `server/mcp.ts` | MCP tool server for the agent (search / list / read documents) |
-| `scripts/db-setup.ts` | Creates seyl-ai's database, user and the pgvector extension (`npm run db:setup`) |
+| `scripts/db-setup.ts` | Creates seyl-ai's database, user, the pgvector extension and the audit log (`npm run db:setup`) |
 | `server/auth.ts`, `server/owners.ts` | Login (OIDC, BFF, sessions) and conversation ownership |
 | `server/csrf.ts` | Cross-site request protection for every state-changing API call |
+| `server/redirect.ts` | Where to go after sign-in: only a path on this site (no open redirects) |
+| `server/approvals.ts` | "Allow for this chat": approval rules per conversation |
+| `server/audit.ts` | The append-only audit log |
+| `server/think.ts` | Which questions think first (`shouldThink`) |
+| `tests/`, `.github/workflows/ci.yml` | Unit tests (`npm test`) and the CI pipeline |
+| `scripts/license-check.ts` | Fails on any npm dependency without a permissive license (`npm run license:check`) |
 | `server/devices.ts`, `web/src/components/devices/DevicesPanel.tsx`, `web/src/lib/deviceConfig.ts` | Connect a device: per-user gateway keys + MCP tokens, the generated opencode.json |
 | `scripts/devices-test.ts` | Device security test (`npm run devices:test`) |
 | `keycloak/themes/seyl`, `deploy/keycloak.Dockerfile` | Keycloak login theme in the app's (LibreChat's) design, baked into `seyl-ai/keycloak` |
@@ -664,7 +728,7 @@ Every request that changes something (POST, PUT, DELETE) must send `X-Seyl-Csrf:
 | `DELETE /api/conversations/:id` | Delete one |
 | `GET /api/conversations/:id/messages` | History + whether the agent is still working |
 | `POST /api/conversations/:id/prompt` | Send a message: `{ text, images?, documents?: [{ id }], think? }` (reply arrives on the event stream) |
-| `POST /api/conversations/:id/permissions/:requestID` | Answer an approval request: `{ reply: "once" \| "always" \| "reject" }` |
+| `POST /api/conversations/:id/permissions/:requestID` | Answer an approval request: `{ reply: "once" \| "always" \| "reject" }` ("always" = for this conversation only) |
 | `POST /api/conversations/:id/abort` | Stop the agent |
 | `GET /api/conversations/:id/events` | Live updates (Server-Sent Events) |
 | `GET /api/voice/status` | Which voice services are up (`{ asr, tts }`) |

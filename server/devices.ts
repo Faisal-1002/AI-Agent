@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import type { DeviceInfo, NewDevice, User } from "../shared/chat.js";
+import { audit } from "./audit.js";
 import { sql } from "./db.js";
 import { cleanName } from "./documents.js";
 import { LLM_GATEWAY_URL } from "./opencode.js";
@@ -98,6 +99,7 @@ devices.post("/", async (c) => {
       INSERT INTO devices (id, owner, name, gateway_key_hash, mcp_token_hash, expires_at)
       VALUES (${id}, ${user.sub}, ${name}, ${keyHash}, ${sha256(mcpToken)}, now() + ${`${KEY_DAYS} days`}::interval)
       RETURNING id, name, created_at, last_used_at, expires_at`;
+    await audit(user.sub, "device.connect", id, { name });
     return c.json<NewDevice>(
       { device: toInfo(row), apiKey, mcpToken, gatewayUrl: `${PUBLIC_URL}/llm/v1`, mcpUrl: `${PUBLIC_URL}/mcp`, models: DEVICE_MODELS },
       201,
@@ -117,5 +119,6 @@ devices.delete("/:id", async (c) => {
   if (!row) return c.json({ error: "Not found" }, 404);
   await gatewayAdmin("/key/delete", { keys: [row.gateway_key_hash] });
   await sql`UPDATE devices SET revoked_at = now() WHERE id = ${id}`;
+  await audit(c.get("user").sub, "device.disconnect", id);
   return c.body(null, 204);
 });

@@ -5,7 +5,9 @@ import { createMiddleware } from "hono/factory";
 import { EncryptJWT, jwtDecrypt } from "jose";
 import * as oidc from "openid-client";
 import type { User } from "../shared/chat.js";
+import { audit } from "./audit.js";
 import { sql } from "./db.js";
+import { safeReturnTo } from "./redirect.js";
 
 // Login with OpenID Connect (Authorization Code + PKCE), as a "backend for frontend":
 // the api does the whole OAuth dance server-side and gives the browser only an opaque,
@@ -103,24 +105,6 @@ export const requireUser = createMiddleware<{ Variables: { user: User } }>(async
 
 type LoginFlow = { verifier: string; state: string; nonce: string; returnTo: string };
 
-// Where to go after signing in: only a path on THIS site. Checking the text isn't enough —
-// browsers read "/\evil.example" or "/<tab>/evil.example" as another site — so resolve it
-// like a browser would and compare origins.
-function safeReturnTo(value: string | undefined): string {
-  // Long values: it travels in the login cookie (and nothing legitimate is that long).
-  if (!value || value.length > 512) return "/";
-  try {
-    const home = new URL(PUBLIC_URL);
-    const target = new URL(value, home);
-    if (target.origin !== home.origin || /[\\\u0000-\u001f]/.test(value)) return "/";
-    const path = target.pathname + target.search + target.hash;
-    // Resolving can itself produce "//": "/.//evil.example" → pathname "//evil.example",
-    // which a browser reads as another site. Only a single leading slash is a local path.
-    return path.startsWith("//") ? "/" : path;
-  } catch {
-    return "/";
-  }
-}
 
 // Errors the login page can show. The URL only carries a code; the words come from the app
 // (an attacker could otherwise put any text on our login screen with a crafted link).
@@ -137,7 +121,7 @@ export function authRoutes(onLogin: (user: User) => Promise<void>) {
       verifier: oidc.randomPKCECodeVerifier(),
       state: oidc.randomState(),
       nonce: oidc.randomNonce(),
-      returnTo: safeReturnTo(c.req.query("returnTo")), // no open redirects
+      returnTo: safeReturnTo(c.req.query("returnTo"), PUBLIC_URL), // no open redirects (server/redirect.ts)
     };
     const sealed = await new EncryptJWT(flow).setProtectedHeader({ alg: "dir", enc: "A256GCM" }).setExpirationTime("10m").encrypt(flowKey());
     setCookie(c, "seyl_login", sealed, { httpOnly: true, secure: SECURE_COOKIES, sameSite: "Lax", path: "/api/auth", maxAge: 600 });
@@ -199,6 +183,7 @@ export function authRoutes(onLogin: (user: User) => Promise<void>) {
               ${tokens.id_token ?? ""}, now() + ${`${SESSION_HOURS} hours`}::interval)`;
     setCookie(c, "seyl_session", sessionId, { httpOnly: true, secure: SECURE_COOKIES, sameSite: "Lax", path: "/", maxAge: SESSION_HOURS * 3600 });
     await onLogin(user);
+    await audit(user.sub, "login", undefined, { username: user.username });
     console.log(`[auth] signed in: ${user.username ?? user.sub}`);
     return c.redirect(flow.returnTo);
   });
@@ -215,6 +200,7 @@ export function authRoutes(onLogin: (user: User) => Promise<void>) {
     const user = AUTH_ENABLED ? await sessionUser(c) : undefined;
     const id = getCookie(c, "seyl_session");
     if (id) await sql`DELETE FROM auth_sessions WHERE id_hash = ${hash(id)}`;
+    if (user) await audit(user.sub, "logout");
     deleteCookie(c, "seyl_session", { path: "/" });
     if (!user) return c.json({ logoutUrl: "/" });
     const logoutUrl = oidc.buildEndSessionUrl(await provider(), { post_logout_redirect_uri: `${PUBLIC_URL}/`, id_token_hint: user.idToken });

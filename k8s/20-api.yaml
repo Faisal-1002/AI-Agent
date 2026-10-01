@@ -36,6 +36,9 @@ spec:
             - name: SEYL_MCP_TOKEN # the harness must present this to use /mcp
               valueFrom:
                 secretKeyRef: { name: seyl-secrets, key: SEYL_MCP_TOKEN }
+            - name: OPENCODE_SERVER_PASSWORD # to talk to the harness (OpenCode's HTTP Basic auth)
+              valueFrom:
+                secretKeyRef: { name: seyl-secrets, key: OPENCODE_SERVER_PASSWORD }
             # Login (OIDC with Keycloak, server/auth.ts)
             - name: AUTH_ENABLED
               value: "true"

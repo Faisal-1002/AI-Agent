@@ -19,6 +19,16 @@ export const OPENCODE_PORT = Number(env.OPENCODE_PORT ?? 4097);
 // How the backend reaches the harness (e.g. http://harness:4097 in a cluster).
 export const OPENCODE_URL = env.OPENCODE_URL ?? `http://127.0.0.1:${OPENCODE_PORT}`;
 
+// The harness has full control of the agent (its config, sessions, a shell endpoint), so it
+// requires a password — OpenCode's own HTTP Basic auth — and only the api knows it. Anything
+// else that can reach it (another pod, a process on the PC) gets 401. Set in the containers;
+// optional with npm run dev, where the harness listens on 127.0.0.1 only.
+export const HARNESS_USER = env.OPENCODE_SERVER_USERNAME ?? "seyl-api";
+const HARNESS_PASSWORD = env.OPENCODE_SERVER_PASSWORD;
+if (env.NODE_ENV === "production" && (HARNESS_PASSWORD ?? "").length < 32) {
+  throw new Error("OPENCODE_SERVER_PASSWORD (32+ characters) is required in production (see .env.example)");
+}
+
 // The LiteLLM gateway (gateway/config.yaml) — the only way the harness reaches a model.
 // It uses its own key, which may call only the chat models (scripts/gateway-keys.ts).
 export const LLM_GATEWAY_URL = env.LLM_GATEWAY_URL ?? "http://127.0.0.1:4000";
@@ -142,4 +152,7 @@ export const config: Config = {
 export const client = createOpencodeClient({
   baseUrl: OPENCODE_URL,
   directory: WORKSPACE,
+  ...(HARNESS_PASSWORD && {
+    headers: { Authorization: `Basic ${Buffer.from(`${HARNESS_USER}:${HARNESS_PASSWORD}`).toString("base64")}` },
+  }),
 });

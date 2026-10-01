@@ -11,9 +11,12 @@ import { reviewReply, screenPrompt } from "./guard.js";
 import { deviceMcp, mcp } from "./mcp.js";
 import { devices } from "./devices.js";
 import { csrfGuard } from "./csrf.js";
+import { approvePending, autoApprove, forgetConversation, rememberForConversation, watchApprovals } from "./approvals.js";
+import { audit } from "./audit.js";
 import { claimUnowned, ownedBy, ownerOf, recordOwner } from "./owners.js";
 import { AGENT, client, FAST_VARIANT, MODEL, MODEL_INFO } from "./opencode.js";
 import { markUsed, warmUp } from "./warmup.js";
+import { shouldThink } from "./think.js";
 import { guardFlags, sessionOf, toChatEvent, toChatMessage, toConversation, toPermissionAsk } from "./translate.js";
 import { voice } from "./voice.js";
 
@@ -88,9 +91,16 @@ app.post("/api/documents", bodyLimit({ maxSize: MAX_UPLOAD_BYTES, onError: (c) =
   if (!SUPPORTED.includes(fileType(file.name))) {
     return c.json({ error: `Unsupported file type. Supported: ${SUPPORTED.join(", ")}` }, 415);
   }
-  return c.json(await addDocument(file), 201); // indexing continues in the background
+  const doc = await addDocument(file); // indexing continues in the background
+  await audit(c.get("user").sub, "document.upload", doc.id, { name: doc.name, size: doc.size });
+  return c.json(doc, 201);
 });
-app.delete("/api/documents/:id", async (c) => (await deleteDocument(c.req.param("id")) ? c.body(null, 204) : c.json({ error: "Not found" }, 404)));
+app.delete("/api/documents/:id", async (c) => {
+  const id = c.req.param("id");
+  if (!(await deleteDocument(id))) return c.json({ error: "Not found" }, 404);
+  await audit(c.get("user").sub, "document.delete", id);
+  return c.body(null, 204);
+});
 
 
 // Conversations = OpenCode sessions, each owned by the user who created it.
@@ -121,7 +131,10 @@ app.post("/api/conversations", async (c) => {
 });
 
 app.delete("/api/conversations/:id", async (c) => {
-  check(await client.session.delete({ sessionID: c.req.param("id") }));
+  const sessionID = c.req.param("id");
+  check(await client.session.delete({ sessionID }));
+  await forgetConversation(sessionID);
+  await audit(c.get("user").sub, "conversation.delete", sessionID);
   return c.body(null, 204);
 });
 
@@ -135,7 +148,10 @@ app.get("/api/conversations/:id/messages", async (c) => {
     client.permission.list({}).then(unwrap),
   ]);
   const busy = status[sessionID] !== undefined && status[sessionID].type !== "idle";
-  const pending = permissions.filter((p) => p.sessionID === sessionID).map(toPermissionAsk);
+  const pending = [];
+  for (const p of permissions.filter((p) => p.sessionID === sessionID)) {
+    if (!(await autoApprove(p))) pending.push(toPermissionAsk(p)); // already allowed in this chat → answered
+  }
   return c.json({ messages: messages.map(toChatMessage), busy, flags: guardFlags(session), permissions: pending });
 });
 
@@ -146,22 +162,6 @@ const MAX_DOCUMENTS = 5;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_IMAGE_CHARS = 6 * 1024 * 1024; // data URL length (~4.5 MB of image)
 
-// Questions about the user's files or documents always think first, whatever the Think
-// toggle says. Measured with scripts/ask.ts: without thinking, the 9B often answered them
-// from file NAMES alone — or invented a document; with thinking it looked them up every time.
-// "About the user's files" = "my/the/attached … document", a file name, or the workspace —
-// not any mention of the word ("how do I read a file in Python" stays fast). Arabic: whole
-// words, with or without "ال" / a possessive ending ("ملفت" = eye-catching doesn't count).
-const NEEDS_LOOKUP = new RegExp(
-  [
-    String.raw`\b(my|the|this|these|those|attached|uploaded|our)\s+(\w+\s+)?(documents?|docs?|files?|pdfs?|uploads?|attachments?|contracts?|cv|resume|reports?|spreadsheets?|notes|slides?)\b`,
-    String.raw`\b\w[\w-]*\.(md|txt|pdf|docx?|csv|json|html?|xlsx?)\b`,
-    String.raw`\bworkspace\b`,
-    String.raw`(^|[\s،,.؟?!:])(ال)?(ملف|ملفات|مستند|مستندات|وثيقة|وثائق)(ي|ك|نا)?($|[\s،,.؟?!:])`,
-  ].join("|"),
-  "i",
-);
-const shouldThink = (requested: boolean, text: string) => requested || NEEDS_LOOKUP.test(text);
 
 // Send a message (text, images and/or documents from the library). The safety filter checks
 // the text first; if allowed, the agent starts and this returns immediately — the reply
@@ -202,6 +202,7 @@ app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 
       (categories.includes("Suicide & Self-Harm")
         ? "It sounds like you might be going through something really hard. You don't have to face it alone — please consider reaching out to someone you trust, or to a local crisis line or emergency service right now."
         : `seyl-ai can't help with that — the safety filter flagged it (${why}).`);
+    await audit(c.get("user").sub, "prompt.blocked", sessionID, { safety: screen.verdict?.safety, categories, reason: screen.reason ? "unavailable" : undefined });
     return c.json({ error, blocked: screen.verdict }, 422);
   }
 
@@ -306,10 +307,18 @@ app.post("/api/conversations/:id/permissions/:requestID", async (c) => {
   // (which ownConversation already checked is the caller's).
   const requestID = c.req.param("requestID");
   const pending = unwrap(await client.permission.list({}));
-  if (!pending.some((p) => p.id === requestID && p.sessionID === c.req.param("id"))) {
-    return c.json({ error: "Approval request not found" }, 404);
-  }
-  check(await client.permission.reply({ requestID, reply }));
+  const request = pending.find((p) => p.id === requestID && p.sessionID === c.req.param("id"));
+  if (!request) return c.json({ error: "Approval request not found" }, 404);
+  // "Allow for this chat": remembered for THIS conversation only (server/approvals.ts) and sent
+  // to OpenCode as "once" — its own "always" would allow it for every chat of every user.
+  const undo = reply === "always" ? await rememberForConversation(request) : undefined;
+  const res = await client.permission.reply({ requestID, reply: reply === "always" ? "once" : reply });
+  if (res.error !== undefined) await undo?.(); // not answered → nothing allowed either
+  check(res);
+  const action = reply === "always" ? "approval.this_chat" : reply === "once" ? "approval.once" : "approval.deny";
+  await audit(c.get("user").sub, action, request.sessionID, { permission: request.permission, patterns: request.patterns });
+  // Whatever else the agent asked for at the same time, and this rule now covers.
+  if (reply === "always") await approvePending(request.sessionID).catch(() => {});
   return c.body(null, 204);
 });
 
@@ -335,6 +344,7 @@ app.get("/api/conversations/:id/events", (c) => {
         // OpenCode greets every new subscriber; only now is it safe for the UI to send a prompt.
         if (event.type === "server.connected") await send(stream, { type: "ready" });
         if (sessionOf(event) !== sessionID) continue;
+        if (event.type === "permission.asked" && (await autoApprove(event.properties))) continue;
         const chatEvent = toChatEvent(event);
         if (chatEvent) await send(stream, chatEvent);
       }
@@ -358,6 +368,7 @@ async function migrateWithRetry() {
   }
 }
 void migrateWithRetry();
+void watchApprovals(); // "Allow for this chat" answers even when the chat isn't open (server/approvals.ts)
 
 const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
   console.log(`seyl-ai backend running at http://${HOST}:${PORT}`);
