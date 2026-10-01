@@ -109,6 +109,15 @@ Moving a model (say, Ollama → Amazon Bedrock) is a change to that one file.
 - The config is **baked into the gateway image** (`gateway/Dockerfile`), secrets are not — they arrive as
   environment variables. (Also a workaround: Docker Desktop can't bind-mount files from this app's
   virtualized folder.)
+- **MIT code only.** The official LiteLLM image also contains LiteLLM's *proprietary* enterprise code (the
+  `litellm-enterprise` package and an `/app/enterprise` folder, BerriAI Enterprise License), and the proxy loads
+  it automatically whenever it can be imported. Our image is pinned by digest (LiteLLM 1.103.1), deletes both,
+  and **fails the build** if either is still importable. Keys, per-key model lists, rate limits and spend logs
+  are all MIT and keep working.
+- **A safe entrance for devices** (option D's "model key" plug): nginx publishes only
+  `/llm/v1/chat/completions`, `/llm/v1/models` and `/llm/v1/embeddings` at http://localhost:8080/llm/v1, each
+  needing a key. LiteLLM's admin, key, team, UI and SSO routes return 404 from outside (traversal tricks too),
+  and the browser's session cookie is never forwarded to the gateway.
 
 ## Safety
 
