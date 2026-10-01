@@ -377,8 +377,10 @@ every call ──► the conversation's folder (OpenCode keeps one "instance" pe
 - **Upgrading from one shared folder**: conversations from before stay readable but closed for new messages (their
   agent would work in the old shared folder). If they all belonged to **one** person — recorded once, at the first
   migration (table `spaces_upgrade`) — that person's new space gets the old folder's files and the old library. With
-  several, nobody inherits them automatically; an admin gives the old documents to one space:
-  `UPDATE documents SET space_id = '<space id>' WHERE space_id IS NULL;` (as the `seyl` database user).
+  several, nobody inherits them automatically; an admin names the heir *before* they next sign in (as the `seyl`
+  database user): `UPDATE spaces_upgrade SET legacy_owner = '<their OIDC sub>';`. (On this install the old test
+  runs had left 26 deleted test users as "owners" — the live tests now clean up after themselves.) If they've already
+  signed in: `UPDATE documents SET space_id = '<their space id>' WHERE space_id IS NULL;` (documents only).
 - **Upgrade with the old api stopped**: an old api pod still running during a rolling update would serve the old,
   unscoped library. For this release: `kubectl -n seyl-ai scale deploy/api --replicas=0`, `kubectl apply -k .`,
   wait for the harness, then scale the api back to 2.
