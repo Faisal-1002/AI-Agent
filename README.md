@@ -32,8 +32,9 @@ LiteLLM gateway               localhost:4000   gateway/      one front door to e
 - **Backend** — conversations (= OpenCode sessions), prompts, stop, history, and a live event stream; translates OpenCode's data into a small model the UI understands (`server/translate.ts`, types in `shared/chat.ts`).
 - **Web UI** — a chat app in the style of LibreChat: conversation sidebar, streamed markdown replies, collapsible "Thoughts" and tool calls (with their input and output), stop button, light/dark theme.
 
-The agent can only see files in [`workspace/`](workspace). It may read them freely and **change them only with your
-approval** ([Approvals](#approvals)); shell commands and web access are off.
+Every user's agent sees only **their own folder** and **their own documents** ([Workspaces](#workspaces)); new
+folders start with the files in [`workspace/`](workspace). It may read them freely and **change them only with
+your approval** ([Approvals](#approvals)); shell commands and web access are off.
 
 ## Requirements
 
@@ -187,15 +188,21 @@ Lessons learned:
 upload ──► api: extract text (PDF, Word, md, txt, csv, json, html) ──► chunks (~1,200 chars, 200 overlap)
        ──► Qwen3-Embedding (via the gateway) ──► Postgres + pgvector (database "seyl", HNSW index)
 
-agent ──► MCP tool docs_search_documents ──► api :3001/mcp ──► nearest chunks by meaning ──► answer, naming the file
+agent ──► docs_search_documents (custom tool) ──► api :3001/internal/docs ──► the conversation's owner
+      ──► nearest chunks by meaning, in THEIR library only ──► answer, naming the file
 ```
 
 - **Agentic RAG**: instead of pasting search results into every message, the agent gets **tools** — search,
   list, read a document page by page — and decides when to use them (it often refines its query and searches twice).
-- **MCP** (Model Context Protocol, `server/mcp.ts`): the open standard for agent tools. OpenCode connects to it as
-  a remote MCP server (`mcp.docs` in `server/opencode.ts`); any MCP client could use the same tools. It has its
-  **own port** (3001, `MCP_PORT`) that nginx doesn't forward — only the harness reaches it, with the
-  `SEYL_MCP_TOKEN` bearer token (checked in constant time; requests with an `Origin` header, i.e. from a browser, get 403).
+- **Each user's own library**: every document belongs to a space ([Workspaces](#workspaces)) and every query is
+  limited to it — someone else's document behaves exactly like one that doesn't exist (list, delete, attach, search).
+- **The agent's tools know who is asking.** They're OpenCode *custom tools*
+  (`harness-config/opencode/tools/docs.js`): OpenCode hands each call the conversation it runs in, which the model
+  can't change, and the api (`server/tools.ts`) answers from that conversation's owner's library. They call the
+  api's **own port** (3001, `MCP_PORT`) that nginx doesn't forward, with the `SEYL_MCP_TOKEN` bearer token
+  (checked in constant time).
+- **MCP** (Model Context Protocol, `server/mcp.ts`): the same tools as an open-standard server for connected
+  devices ([Connect a device](#connect-a-device)), each device seeing its owner's library.
 - **Attach to a message**: 📎 → *Upload document* puts the file in the library and shows it as a chip; you can send
   once it's indexed. The message then carries a hidden note naming the document(s), so the agent reads them first
   (the chip is rebuilt from that note after a reload). Messages with documents always think first.
@@ -224,7 +231,10 @@ Lessons learned:
 - **Measure, don't guess**: every change above was checked with repeated runs, not one lucky answer.
 - **"Not under /api" is not "not reachable".** `/mcp` sat outside `/api` so that nginx wouldn't forward it — but
   an audit sent `GET /api/..\mcp`: nginx saw a path under `/api/` and passed it on; Node reads `\` as `/` and
-  resolved it to `/mcp`. Now MCP has its own port, and nginx refuses backslashes outright.
+  resolved it to `/mcp`. Now the agent's tools have their own port, and nginx refuses backslashes outright.
+- **One shared token can't tell users apart.** The agent's document tools first were an MCP server that the
+  harness called with one token — so every agent saw every user's documents. MCP calls from OpenCode carry no
+  conversation; custom tools do. (Read in OpenCode's source before building it: the model can't fake it.)
 - **Without thinking, the model skipped the lookup.** With *Think* off (the fast default), "what do my documents
   say?" was answered from the file *names* — or with an invented `contract.pdf` (the example name in our own system
   prompt!). With thinking on it searched every time (6/6). Now example names are gone from the prompt, and
@@ -251,7 +261,7 @@ Sign in ──► /api/auth/login: PKCE verifier + state + nonce (encrypted, 10-
   Error messages are codes in the URL (`?login_error=expired`); the words come from the app, so a crafted link
   can't put its own text on the login page.
 - **Per-user conversations**: each conversation belongs to its creator; someone else's id → `404` (not 403, which
-  would confirm it exists). Conversations from before login existed went to the first user who signed in.
+  would confirm it exists). Each user also has their own folder and library ([Workspaces](#workspaces)).
 - **Sign out** ends the session in the api *and* at Keycloak (otherwise "Sign in" would log straight back in).
 - **Test it**: `npm run auth:test` creates two temporary users and checks 12 things — PKCE, wrong password,
   isolation (list and by id), logout, cookie replay — then deletes them.
@@ -275,7 +285,7 @@ skeptic, with live tests) compared seyl-ai against the OAuth 2.1 draft, the brow
 | **Fixed after the audit** | open redirect in `returnTo` (`/\evil.example` counted as a local path — now resolved like a browser and compared by origin); ID token signature now checked; wildcard logout redirect → exact; the best-practice rules as a Keycloak **client policy for every client** (PKCE S256, no implicit, no password grant — Keycloak's own `admin-cli` allowed the password grant); refresh tokens single-use |
 | **Also fixed** | `/mcp` reachable through nginx (see Documents); admin console + admin realm no longer published; nginx answers only for `localhost`/`127.0.0.1` (stops DNS rebinding — not a network boundary, see below); CSRF protection (`server/csrf.ts`: every change needs the `X-Seyl-Csrf` header, which other sites can't send); security headers (CSP, no framing); approvals bound to their conversation; the api refuses weak or missing secrets and a mistyped `AUTH_ENABLED` |
 | **Since then** | a password on the OpenCode harness (the api signs every call; without it, anything that reached the harness could drive the agent); "Allow for this chat" really per chat (see [Approvals](#approvals)); an append-only [audit log](#audit-log) |
-| **For AWS** | HTTPS everywhere (OAuth 2.0 requires TLS too — and so does any login on the internet); network policies (only the api may reach the harness); per-user documents and workspaces |
+| **For AWS** | HTTPS everywhere (OAuth 2.0 requires TLS too — and so does any login on the internet); network policies (only the api may reach the harness); a sandbox per company (see [Workspaces](#workspaces)) |
 | **Not planned** | back-channel logout, signed-JWT (`private_key_jwt`) client authentication, sender-constrained tokens — OAuth 2.1-profile extras, not needed with OAuth 2.0 |
 
 **Other devices on your network**: Compose publishes the app on `127.0.0.1` only. Docker Desktop's Kubernetes
@@ -304,9 +314,6 @@ Lessons learned:
   starts with `//` is refused as well. The same round found 11 smaller issues (bad input → 502 instead of 400, file
   names that could smuggle text into the model's note, a menu that trapped keyboard focus, …); all fixed and re-tested.
 - **Local shortcuts, not for production**: Keycloak `start-dev`, plain HTTP, short test passwords.
-- **Still shared between users**: the document library and the workspace files. Making them per-user means passing
-  *who is asking* through the agent into its tools (MCP) — and a separate workspace per user. That's part of the
-  multi-user/AWS phase.
 
 ## Connect a device
 
@@ -322,12 +329,12 @@ so a signed-in user connects them from **Devices** in the sidebar and gets two s
 The panel also writes an `opencode.json` for the device that reads both from environment variables (no
 secrets in the file). Seyl stores only hashes; **Disconnect** revokes the key and the token at once.
 
-- The harness's own MCP token stays on its private port: it is refused at the public `/mcp`.
+- A device sees only its owner's documents (the token says whose device it is). The token of the agent's own
+  document tools is refused at the public `/mcp`.
 - Creating keys needs the gateway's admin key, so only the api holds it (`LITELLM_ADMIN_KEY`). A dedicated
   key-issuing service with a narrower role is the cleaner design for later.
 - `npm run devices:test` checks 17 things with two temporary users: what the key and token may and may not do,
   that another user can't see or revoke the device, the anti-CSRF guard, and that revoking works instantly.
-- Still shared: the document library (per-user libraries come with tenancy).
 - **The generated config is locked down**: `enabled_providers: ["seyl"]` (no other provider can be used),
   `share: "disabled"`, and the agent asks before running commands, editing files or fetching web pages.
 
@@ -344,9 +351,67 @@ Lessons learned (from the first end-to-end test with the plain OpenCode CLI):
   Seyl's gateway guard. Still to tune: OpenCode's default `build` agent (large coding prompt, all tools,
   thinking) is slow on the local 9B — a question timed out at 4 minutes.
 
+## Workspaces
+
+Every user has a **space**: their own folder for the agent and their own document library. Today one personal space
+per user; a company space (a team sharing files and documents) is the same thing with members — documents and
+conversations already belong to a space, not to a user.
+
+```
+sign in ──► api: personal space (table spaces) ──► harness admin port: PUT /spaces/<id> ──► /data/workspaces/<id>
+                                                    (mode 0700, starter files from workspace/)
+new conversation ──► OpenCode session in THAT folder ──► conversation_owners: owner, space, folder
+every call ──► the conversation's folder (OpenCode keeps one "instance" per folder: pending approvals, events, status)
+```
+
+- **One OpenCode for everyone, one folder per user.** OpenCode runs one instance per folder, and its
+  "outside the project" rule (`external_directory: deny`) keeps each agent in its own. The folders sit side by side
+  in `/data/workspaces` with opaque ids as names, never one inside another, and never inside a git repository.
+- **OpenCode doesn't know users — the api does.** Any session id works for anyone who can reach the harness, so
+  every route checks `conversation_owners` first; the harness is reachable only by the api (its password).
+- **The document tools know whose conversation it is** (see [Documents](#documents-rag)); connected devices see
+  their owner's library.
+- **Folders are created by the harness**, the only pod that has the volume, on a small admin port (4098, same
+  password as OpenCode). New folders get the starter files; existing ones are never touched; links and `.git`
+  are never copied.
+- **Upgrading from one shared folder**: conversations from before stay readable but closed for new messages (their
+  agent would work in the old shared folder). If they all belonged to **one** person — recorded once, at the first
+  migration (table `spaces_upgrade`) — that person's new space gets the old folder's files and the old library. With
+  several, nobody inherits them automatically; an admin gives the old documents to one space:
+  `UPDATE documents SET space_id = '<space id>' WHERE space_id IS NULL;` (as the `seyl` database user).
+- **Upgrade with the old api stopped**: an old api pod still running during a rolling update would serve the old,
+  unscoped library. For this release: `kubectl -n seyl-ai scale deploy/api --replicas=0`, `kubectl apply -k .`,
+  wait for the harness, then scale the api back to 2.
+- **Long tool output stays out of reach**: OpenCode saves cut-off output in its shared folder, which the agent may
+  not open, so the system prompt tells it to search more narrowly instead, and a document page stays under the
+  16 KB limit even in Arabic or Chinese.
+- **Tested**: `npm run tenancy:test` — two temporary users; Bob tries Alice's document through the API, a
+  connected device and his agent, and her file by its full path and through OpenCode's shared tool-output folder;
+  the secrets never reach him. Then Alice's agent tries to write into `.git`.
+
+What reading OpenCode's source (1.18.33) turned up before building it — each now a rule the harness checks at
+startup (`server/policy.ts`, against the rules OpenCode actually enforces, not just our config):
+
+- **A shared folder nobody had asked for.** OpenCode saves long tool output (a big file, a document page) to one
+  folder for all users and quietly *allows* every agent to read it, after our "deny everything outside". Fixed with
+  an explicit deny of exactly that folder.
+- **The user approves their own edits.** With several users, "every change needs approval" doesn't stop someone from
+  approving a `.git/config` — and git config can make the git commands OpenCode runs execute anything. Writing into
+  `.git` is now refused outright.
+- **Development mode let the agent read `.env`.** `npm run dev` used the repo's `workspace/` folder, inside the
+  seyl-ai git repository — and OpenCode treats the whole repository as the project. Dev folders now live in
+  `~/.seyl-ai/workspaces`.
+- **The harness also loaded your personal OpenCode config** (`~/.config/opencode`, with its MCP servers) in
+  development, and in the containers OpenCode tried to npm-install a package into its writable config folder at
+  every start. Its config folder is now the repo's `harness-config/` (dev) or a root-owned copy in the image.
+
+Not yet: OpenCode keeps every folder's instance in memory until it restarts (an idle cleanup is the next step for many
+users), and one OpenCode process for everyone is a shared process — real separation between *companies* means a
+sandboxed harness per company (the platform plan).
+
 ## Approvals
 
-seyl-ai can create and change files in the workspace — but every change waits for you:
+seyl-ai can create and change files in the user's folder — but every change waits for you:
 
 ```
 agent wants to edit notes.md ──► OpenCode pauses (permission "ask") ──► event ──► card in the chat with the diff
@@ -357,7 +422,7 @@ you: Allow once / Allow for this chat / Deny ──► POST /api/conversations/:
 |---|---|---|
 | read, glob, grep, document tools | allow | on its own |
 | edit / write (change or create a file) | **ask** | shows the diff, waits for your answer |
-| bash, web, sub-agents, outside the workspace | deny | not even offered to the model |
+| bash, web, sub-agents, outside the user's folder, anything in `.git` | deny | not even offered to the model |
 
 - **Allow for this chat** means this chat: the api stores the approval for that one conversation
   (`server/approvals.ts`) and answers OpenCode "once"; later requests of the same kind *in that conversation*
@@ -366,11 +431,10 @@ you: Allow once / Allow for this chat / Deny ──► POST /api/conversations/:
 - **The workspace can't change the rules.** OpenCode normally also loads `opencode.json`, `.opencode/` (agents,
   plugins, MCP servers) and `AGENTS.md` from the project folder — here the workspace, which the agent writes to.
   One approved edit there would have changed the rules for every user, or run code in the harness. The harness
-  turns that off (`OPENCODE_DISABLE_PROJECT_CONFIG`) and its startup check also refuses MCP servers that aren't ours.
+  turns that off (`OPENCODE_DISABLE_PROJECT_CONFIG`) and its startup check refuses any MCP server.
 - Every answer — yours or automatic — goes into the [audit log](#audit-log).
 - Pending approvals survive a page reload (the api lists them from OpenCode).
-- The workspace is on a persistent volume, so approved changes survive restarts; an `initContainer` seeds it from
-  the image once (`cp -n` never overwrites your edits).
+- Every user's folder is on the harness's persistent volume, so approved changes survive restarts.
 - Tested: an approved edit landed on disk and survived a harness restart; a denied `todo.md` was never created and
   the agent asked what to do instead.
 
@@ -593,8 +657,8 @@ After changing code: `docker compose build` then `kubectl -n seyl-ai rollout res
 | Manifest | Contents |
 |---|---|
 | `k8s/00-namespace.yaml` | the `seyl-ai` namespace |
-| `k8s/10-harness.yaml` | harness Deployment (1 replica, `Recreate`), 1 GiB PersistentVolumeClaim for sessions and the workspace (seeded by an `initContainer`), ClusterIP Service |
-| `k8s/20-api.yaml` | api Deployment (2 replicas) with readiness + liveness probes on `/api/healthz`, `preStop` pause, ClusterIP Service: 3000 (api, via nginx) and 3001 (MCP tools, harness only) |
+| `k8s/10-harness.yaml` | harness Deployment (1 replica, `Recreate`), 1 GiB PersistentVolumeClaim for sessions and every user's folder (`/data/workspaces`) plus the old shared folder (seeded by an `initContainer`), ClusterIP Service: 4097 (OpenCode) and 4098 (admin: creates folders) |
+| `k8s/20-api.yaml` | api Deployment (2 replicas) with readiness + liveness probes on `/api/healthz`, `preStop` pause, ClusterIP Service: 3000 (api, via nginx) and 3001 (the agent's document tools, harness only) |
 | `k8s/30-web.yaml` | web Deployment (2 replicas), `preStop` pause, LoadBalancer Service on port 8080 |
 | `k8s/40-asr.yaml`, `k8s/50-tts.yaml` | voice Deployments (1 replica each) with a 5 GiB volume for the model, a `startupProbe` that allows 10 min for the first download, memory limits sized from peak usage |
 | `k8s/60-postgres.yaml` | Postgres 16 + pgvector (`0.8.6-pg16-trixie`, 1 replica, 2 GiB volume): the gateway's database and seyl-ai's documents; on AWS a managed database (RDS) |
@@ -620,7 +684,11 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `OPENCODE_HOSTNAME` / `OPENCODE_PORT` | `127.0.0.1` / `4097` | harness |
 | `LLM_GATEWAY_URL` | `http://127.0.0.1:4000` | harness and api → LiteLLM |
 | `LITELLM_KEY_HARNESS` / `LITELLM_KEY_API` | from `.env` | each consumer's gateway key |
-| `SEYL_WORKSPACE` | `./workspace` | folder the agent works in (path inside the harness) |
+| `SEYL_WORKSPACES_ROOT` | `~/.seyl-ai/workspaces` (containers: `/data/workspaces`) | where the spaces' folders live (on the harness; never inside a git repository) |
+| `SEYL_WORKSPACE_SEED` | `./workspace` (containers: `/workspace-seed`) | starter files for a new space |
+| `SEYL_WORKSPACE` | `./workspace` (containers: `/workspace`) | the old shared folder from before spaces |
+| `SEYL_HARNESS_ADMIN_URL` / `SEYL_HARNESS_ADMIN_PORT` | `http://127.0.0.1:4098` / OpenCode's port + 1 | api → harness: creates the spaces' folders |
+| `XDG_CONFIG_HOME` | `./harness-config` (containers: `/opt/seyl/config`, root-owned) | harness: OpenCode's config folder — our custom tools |
 | `TTS_VOICE` | `Aiden` | api: voice used for read-aloud |
 | `TORCH_THREADS` | `8` (asr) / `4` (tts) | voice services: CPU threads |
 | `GUARD_MODE` | `enforce` | api: `enforce` / `monitor` / `off` ([Safety](#safety)) |
@@ -630,11 +698,11 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `OIDC_ISSUER` / `OIDC_INTERNAL_ISSUER` | `<public>/auth/realms/seyl` / unset | api: the issuer, and how to reach it from inside the cluster |
 | `OIDC_CLIENT_SECRET`, `SEYL_SESSION_SECRET` | from `.env` | api: client secret at Keycloak; key for the login cookie |
 | `SEYL_DB_HOST` / `SEYL_DB_PORT` / `SEYL_DB_PASSWORD` | `127.0.0.1` / `5432` / from `.env` | api: seyl-ai's own database |
-| `SEYL_MCP_URL` | `http://127.0.0.1:3001/mcp` | harness → the api's MCP tool server |
+| `SEYL_DOCS_URL` | `http://127.0.0.1:3001/internal/docs` | harness → the api: the agent's document tools |
 | `HOST`, `PORT`, `MCP_PORT` | `127.0.0.1`, `3000`, `3001` | api: where it listens (containers set `HOST=0.0.0.0`) |
 | `KEYCLOAK_URL` | port-forward to `127.0.0.1:8081/auth` | scripts: Keycloak's admin API |
 | `LITELLM_ADMIN_KEY` | from `LITELLM_MASTER_KEY` | api: creates and revokes device keys |
-| `SEYL_MCP_TOKEN` | from `.env` | harness ↔ api: bearer token for `/mcp` |
+| `SEYL_MCP_TOKEN` | from `.env` | harness ↔ api: bearer token of the agent's document tools |
 | `OPENCODE_SERVER_PASSWORD` / `OPENCODE_SERVER_USERNAME` | from `.env` / `seyl-api` | harness ↔ api: HTTP Basic auth on the harness (containers refuse to start with fewer than 32 characters) |
 
 ## Tests and CI
@@ -658,7 +726,7 @@ On every push to `main` and every pull request, GitHub runs `.github/workflows/c
 
 `npm run license:check` reads every npm package's license from `package-lock.json` and fails on anything that
 isn't permissive (MIT, Apache-2.0, BSD, ISC, …); MPL-2.0 is accepted only for build tools that never ship.
-The integration tests (`auth:test`, `devices:test`, `approvals:test`, `guard:eval`) need the running stack, so they
+The integration tests (`auth:test`, `devices:test`, `approvals:test`, `tenancy:test`, `guard:eval`) need the running stack, so they
 stay local. `npm run approvals:test` has a temporary user approve one edit "for this chat", then checks that the
 next edit in that chat goes through with no browser open, that another chat is asked again, what the audit log
 recorded, that the log can't be changed, and that the harness refuses requests without its password.
@@ -682,7 +750,10 @@ recorded, that the log can't be changed, and that the harness refuses requests w
 | `server/prompts/seyl-ai.md` | The agent's system prompt |
 | `scripts/guard-eval.ts` | Safety filter evaluation (`npm run guard:eval`) |
 | `server/documents.ts`, `server/chunk.ts`, `server/db.ts` | Document library: extraction, chunking, embeddings, pgvector search; database connection + tables |
-| `server/mcp.ts` | MCP tool server for the agent (search / list / read documents) |
+| `server/mcp.ts` | MCP server for connected devices (search / list / read the owner's documents) |
+| `server/tools.ts`, `harness-config/opencode/tools/docs.js` | The agent's document tools: the custom tools in the harness, and the api endpoint they call |
+| `server/spaces.ts`, `server/paths.ts` | Spaces (each user's folder + library) and where the folders live |
+| `server/policy.ts` | The agent's safety rules as decisions, checked against what OpenCode enforces (harness startup + unit tests) |
 | `scripts/db-setup.ts` | Creates seyl-ai's database, user, the pgvector extension and the audit log (`npm run db:setup`) |
 | `server/auth.ts`, `server/owners.ts` | Login (OIDC, BFF, sessions) and conversation ownership |
 | `server/csrf.ts` | Cross-site request protection for every state-changing API call |
@@ -695,6 +766,7 @@ recorded, that the log can't be changed, and that the harness refuses requests w
 | `server/devices.ts`, `web/src/components/devices/DevicesPanel.tsx`, `web/src/lib/deviceConfig.ts` | Connect a device: per-user gateway keys + MCP tokens, the generated opencode.json |
 | `scripts/devices-test.ts` | Device security test (`npm run devices:test`) |
 | `scripts/approvals-test.ts` | Approvals + audit log test, live (`npm run approvals:test`) |
+| `scripts/tenancy-test.ts`, `scripts/lib/live.ts` | Per-user isolation test, live (`npm run tenancy:test`); helpers + cleanup for the live tests |
 | `keycloak/themes/seyl`, `deploy/keycloak.Dockerfile` | Keycloak login theme in the app's (LibreChat's) design, baked into `seyl-ai/keycloak` |
 | `scripts/lib/keycloak-admin.ts` | Reach Keycloak's admin API directly (starts a port-forward if needed) |
 | `web/src/components/input/AttachMenu.tsx`, `Attachments.tsx`, `web/src/hooks/useAttachments.ts` | 📎 menu (image / document), attachment chips, upload + indexing status |
@@ -717,7 +789,7 @@ recorded, that the log can't be changed, and that the harness refuses requests w
 | `web/src/lib/images.ts` | Shrinks and re-encodes attached images in the browser before upload |
 | `web/src/components/chat/PermissionCard.tsx` | The approval card: what, which file, the diff, Allow / Deny |
 | `ollama/*.Modelfile` | Model variants: Qwen3.5 9B (32k context), Qwen3.5 0.8B (CPU); the old Qwen3 8B for reference |
-| `workspace/` | The only folder the agent can see |
+| `workspace/` | Starter files for every new space (and, in containers, the old shared folder) |
 
 ### Backend API
 
@@ -746,7 +818,7 @@ Every request that changes something (POST, PUT, DELETE) must send `X-Seyl-Csrf:
 | `GET /api/documents` | The document library |
 | `POST /api/documents` | Multipart `file` (≤ 20 MB) → stored, indexed in the background |
 | `DELETE /api/documents/:id` | Remove a document and its passages |
-| `POST /mcp` | MCP endpoint for the harness (bearer token; not proxied by nginx) |
+| `POST /internal/docs/:op` (port 3001) | The agent's document tools: search / list / read in the conversation owner's library (bearer token; not proxied by nginx) |
 
 ## Credits
 

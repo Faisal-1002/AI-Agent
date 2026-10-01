@@ -5,16 +5,22 @@
 // bypasses two audits found; the device config case is the silent cloud fallback.
 
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, it } from "node:test";
 import { Hono } from "hono";
 import { covers } from "../server/approvals.js";
 import { csrfGuard } from "../server/csrf.js";
 import { cleanName } from "../server/documents.js";
+import { AGENT, config } from "../server/opencode.js";
+import { displayPath, LEGACY_WORKSPACE, spaceDir, TOOL_OUTPUT_GLOB, WORKSPACES_ROOT } from "../server/paths.js";
+import { evaluate, rulesFrom, violations } from "../server/policy.js";
 import { decide, parseVerdict } from "../server/guard.js";
 import { safeReturnTo } from "../server/redirect.js";
 import { shouldThink } from "../server/think.js";
 import { CSRF_HEADER, type NewDevice } from "../shared/chat.js";
 import { opencodeConfig } from "../web/src/lib/deviceConfig.js";
+import { shortPath } from "../web/src/lib/paths.js";
 
 const HOME = "http://localhost:8080";
 
@@ -130,5 +136,85 @@ describe("device config: locked to Seyl, no secrets in the file", () => {
   it("points at the Seyl gateway and MCP entrance", () => {
     assert.equal(config.provider.seyl.options.baseURL, device.gatewayUrl);
     assert.equal(config.mcp["seyl-docs"].url, device.mcpUrl);
+  });
+});
+
+describe("spaces: one folder per space, nothing else", () => {
+  it("a space id becomes a folder under the workspaces root", () =>
+    assert.equal(spaceDir("0F2B6D8A-1C3E-4A5B-9C7D-0E1F2A3B4C5D"), path.join(WORKSPACES_ROOT, "0f2b6d8a-1c3e-4a5b-9c7d-0e1f2a3b4c5d")));
+  for (const bad of ["", "..", "../etc", "x/../../y", "0f2b6d8a-1c3e-4a5b-9c7d-0e1f2a3b4c5d/..", "%2e%2e"]) {
+    it(`refuses ${JSON.stringify(bad)}`, () => assert.throws(() => spaceDir(bad)));
+  }
+  it("spaces never sit inside the old shared folder (it would contain them)", () =>
+    assert.ok(path.relative(LEGACY_WORKSPACE, WORKSPACES_ROOT).startsWith("..")));
+});
+
+describe("paths are shown relative to the user's folder", () => {
+  const dir = "/data/workspaces/0f2b6d8a-1c3e-4a5b-9c7d-0e1f2a3b4c5d";
+  it("pattern relative to the root", () => assert.equal(displayPath(`${dir.slice(1)}/notes.md`, dir), "notes.md"));
+  it("absolute path", () => assert.equal(displayPath(`${dir}/sub/a.md`, dir), "sub/a.md"));
+  it("Windows path", () =>
+    assert.equal(displayPath(String.raw`Users\me\.seyl-ai\workspaces\x\b.md`, String.raw`C:\Users\me\.seyl-ai\workspaces\x`), "b.md"));
+  it("outside the folder: unchanged", () => assert.equal(displayPath("/etc/passwd", dir), "/etc/passwd"));
+  it("a look-alike folder is not inside", () => assert.equal(displayPath(`${dir}x/a.md`, dir), `${dir}x/a.md`));
+  it("UI: tool titles lose the space folder", () => {
+    assert.equal(shortPath("data/workspaces/0f2b6d8a-1c3e-4a5b-9c7d-0e1f2a3b4c5d/notes.md"), "notes.md");
+    assert.equal(shortPath("/workspace/notes.md"), "notes.md");
+    assert.equal(shortPath("notes.md"), "notes.md");
+    assert.equal(shortPath("projects/workspace/budget.md"), "projects/workspace/budget.md"); // a folder named workspace inside a space
+  });
+});
+
+describe("agent policy: OpenCode's rules, decided the way OpenCode decides", () => {
+  const ours = rulesFrom(config.agent?.[AGENT]?.permission as Record<string, string | Record<string, string>>);
+  it("our config gives every required decision", () => assert.deepEqual(violations(ours), []));
+  it("catches edits without approval", () =>
+    assert.ok(violations([...ours, { permission: "edit", pattern: "*", action: "allow" }]).some((v) => v.startsWith("edit"))));
+  it("catches OpenCode's own allow for its shared tool-output folder", () =>
+    assert.ok(violations([...ours, { permission: "external_directory", pattern: TOOL_OUTPUT_GLOB, action: "allow" }]).length > 0));
+  it("…even if OpenCode's path differs from ours (any outside allow that wins is caught)", () =>
+    assert.ok(violations([...ours, { permission: "external_directory", pattern: "/somewhere/else/tool-output/*", action: "allow" }]).length > 0));
+  it("OpenCode's own outside allows BEFORE our deny are fine (ours wins)", () =>
+    assert.deepEqual(violations([{ permission: "external_directory", pattern: "/tmp/*", action: "allow" }, ...ours]), []));
+  it("the last matching rule wins, '*' crosses folders", () => {
+    assert.equal(evaluate(ours, "edit", "data/workspaces/x/deep/sub/.git/config"), "deny");
+    assert.equal(evaluate(ours, "edit", "data/workspaces/x/.gitignore"), "ask");
+    assert.equal(evaluate(ours, "edit", "data/workspaces/x/my.git/notes.md"), "ask");
+  });
+  it("no MCP servers: the document tools are custom tools", () => assert.deepEqual(config.mcp, {}));
+});
+
+describe("the agent's document tools (harness-config/opencode/tools/docs.js)", async () => {
+  const file = new URL("../harness-config/opencode/tools/docs.js", import.meta.url);
+  const tools = (await import(file.href)) as Record<string, { description?: unknown; args?: Record<string, unknown>; execute?: unknown }>;
+  it("exports exactly the three docs_* tools", () =>
+    assert.deepEqual(Object.keys(tools).sort(), ["list_documents", "read_document", "search_documents"]));
+  for (const [name, tool] of Object.entries(tools)) {
+    it(`${name}: description, JSON-Schema args, execute`, () => {
+      assert.equal(typeof tool.description, "string");
+      assert.equal(typeof tool.execute, "function");
+      for (const schema of Object.values(tool.args ?? {})) assert.ok(typeof (schema as { type?: unknown }).type === "string");
+    });
+  }
+  it("imports nothing (needs no packages)", async () => {
+    const source = await readFile(file, "utf8");
+    assert.ok(!/^\s*import\s/m.test(source) && !/\brequire\(/.test(source));
+  });
+  it("sends OpenCode's conversation id and folder, not the model's", async () => {
+    let sent: { sessionID?: string; directory?: string; args?: unknown } = {};
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: string, init: { body: string }) => {
+      sent = JSON.parse(init.body);
+      return new Response(JSON.stringify({ text: "ok" }), { status: 200 });
+    }) as unknown as typeof fetch;
+    try {
+      const context = { sessionID: "ses_real", directory: "/data/workspaces/x", abort: new AbortController().signal };
+      const execute = tools.search_documents.execute as (args: unknown, context: unknown) => Promise<string>;
+      assert.equal(await execute({ query: "q", sessionID: "ses_forged", directory: "/elsewhere" }, context), "ok");
+      assert.equal(sent.sessionID, "ses_real");
+      assert.equal(sent.directory, "/data/workspaces/x");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

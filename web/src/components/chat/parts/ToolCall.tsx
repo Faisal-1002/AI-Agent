@@ -1,6 +1,7 @@
 import { CircleAlert, LoaderCircle, Wrench } from "lucide-react";
 import type { ChatPart } from "../../../../../shared/chat";
 import { cn } from "../../../lib/cn";
+import { shortPath } from "../../../lib/paths";
 import { CodeBlock } from "../../ui/CodeBlock";
 import { Collapsible } from "../../ui/Collapsible";
 
@@ -35,7 +36,7 @@ export function ToolCall({ part }: { part: ToolPart }) {
             )}
           />
           <span className="font-medium">{label(part)}</span>
-          {part.title && <span className="truncate text-text-tertiary">{part.title}</span>}
+          {part.title && <span className="truncate text-text-tertiary">{shortPath(part.title)}</span>}
         </>
       }
     >

@@ -19,7 +19,8 @@ export type AuditAction =
   | "document.upload"
   | "document.delete"
   | "conversation.delete"
-  | "prompt.blocked";
+  | "prompt.blocked"
+  | "space.create";
 
 // Never throws: an audit failure is logged, and the action itself goes ahead.
 export async function audit(actor: string, action: AuditAction, target?: string, detail?: Record<string, unknown>): Promise<void> {

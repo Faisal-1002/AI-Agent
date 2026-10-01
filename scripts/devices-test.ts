@@ -6,6 +6,7 @@
 
 import { randomBytes } from "node:crypto";
 import { keycloakAdmin } from "./lib/keycloak-admin.js";
+import { removeUserData } from "./lib/live.js";
 import { Session } from "./lib/session.js";
 
 try {
@@ -85,7 +86,14 @@ try {
   check(after.status === 401, `its gateway key stops working (HTTP ${after.status})`);
   check((await mcp(`Bearer ${dev.mcpToken}`)).status === 401, "its MCP token stops working");
 } finally {
-  for (const id of created) await kc(`/users/${id}`, { method: "DELETE" }).catch(() => {});
+  for (const id of created) {
+    try {
+      removeUserData(id); // their space, its folder, ownership rows (Keycloak id = OIDC sub)
+    } catch (err) {
+      console.warn(`! could not remove the data of ${id}: ${(err as Error).message}`);
+    }
+    await kc(`/users/${id}`, { method: "DELETE" }).catch(() => {});
+  }
   console.log(`(${created.length} temporary users deleted)`);
   close();
 }

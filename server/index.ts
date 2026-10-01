@@ -1,3 +1,4 @@
+import "./env.js"; // first: .env before any module reads its settings
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -8,12 +9,15 @@ import { AUTH_ENABLED, authRoutes, requireUser } from "./auth.js";
 import { migrate } from "./db.js";
 import { addDocument, cleanName, deleteDocument, fileType, listDocuments, MAX_UPLOAD_BYTES, readyDocuments, SUPPORTED } from "./documents.js";
 import { reviewReply, screenPrompt } from "./guard.js";
-import { deviceMcp, mcp } from "./mcp.js";
+import { deviceMcp } from "./mcp.js";
+import { tools } from "./tools.js";
 import { devices } from "./devices.js";
 import { csrfGuard } from "./csrf.js";
 import { approvePending, autoApprove, forgetConversation, rememberForConversation, watchApprovals } from "./approvals.js";
 import { audit } from "./audit.js";
-import { claimUnowned, ownedBy, ownerOf, recordOwner } from "./owners.js";
+import { conversationOf, ownedBy, ownsLegacy, recordOwner, type ConversationRecord } from "./owners.js";
+import { LEGACY_WORKSPACE, UUID } from "./paths.js";
+import { personalSpace } from "./spaces.js";
 import { AGENT, client, FAST_VARIANT, MODEL, MODEL_INFO } from "./opencode.js";
 import { markUsed, warmUp } from "./warmup.js";
 import { shouldThink } from "./think.js";
@@ -21,12 +25,12 @@ import { guardFlags, sessionOf, toChatEvent, toChatMessage, toConversation, toPe
 import { voice } from "./voice.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
-// The agent's MCP tool server listens on its own port, which nginx doesn't forward:
-// browsers (and anyone else reaching the app) can't get to it at all.
+// The agent's document tools (server/tools.ts) call the api on its own port, which nginx doesn't
+// forward: browsers (and anyone else reaching the app) can't get to it at all.
 const MCP_PORT = Number(process.env.MCP_PORT ?? 3001);
 // Only this machine by default (npm run dev); the containers set HOST=0.0.0.0.
 const HOST = process.env.HOST ?? "127.0.0.1";
-const app = new Hono<{ Variables: { user: User } }>();
+const app = new Hono<{ Variables: { user: User; conversation: ConversationRecord } }>();
 
 // OpenCode SDK calls return { data, error } instead of throwing; these turn
 // errors into exceptions, which onError sends back as HTTP 502.
@@ -56,11 +60,9 @@ app.use("/api/*", requireUser);
 app.route(
   "/api/auth",
   authRoutes(async (user) => {
-    // Conversations from before login existed: the first person to sign in gets them.
-    const sessions = unwrap(await client.session.list({ roots: true, limit: 1000 }));
-    const unowned = [];
-    for (const s of sessions) if (!(await ownerOf(s.id))) unowned.push(s.id);
-    if (unowned.length) await claimUnowned(unowned, user.sub);
+    // Their space and its folder, ready before the first conversation. Not fatal: creating a
+    // conversation tries again.
+    await personalSpace(user.sub).catch((err: Error) => console.error(`[spaces] ${user.sub}: ${err.message}`));
   }),
 );
 app.get("/api/readyz", async (c) => {
@@ -83,40 +85,50 @@ app.route("/mcp", deviceMcp);
 // Speech-to-text and text-to-speech (server/voice.ts).
 app.route("/api/voice", voice);
 
-// Document library for "chat with your documents" (server/documents.ts).
-app.get("/api/documents", async (c) => c.json(await listDocuments()));
+// Document library for "chat with your documents" (server/documents.ts) — each user's own.
+const library = async (user: User) => (await personalSpace(user.sub, { folder: false })).id;
+app.get("/api/documents", async (c) => c.json(await listDocuments(await library(c.get("user")))));
 app.post("/api/documents", bodyLimit({ maxSize: MAX_UPLOAD_BYTES, onError: (c) => c.json({ error: "File too large (max 20 MB)" }, 413) }), async (c) => {
   const { file } = await c.req.parseBody();
   if (!(file instanceof File)) return c.json({ error: "Missing file" }, 400);
   if (!SUPPORTED.includes(fileType(file.name))) {
     return c.json({ error: `Unsupported file type. Supported: ${SUPPORTED.join(", ")}` }, 415);
   }
-  const doc = await addDocument(file); // indexing continues in the background
+  const doc = await addDocument(file, await library(c.get("user")), c.get("user").sub); // indexing continues in the background
   await audit(c.get("user").sub, "document.upload", doc.id, { name: doc.name, size: doc.size });
   return c.json(doc, 201);
 });
 app.delete("/api/documents/:id", async (c) => {
   const id = c.req.param("id");
-  if (!(await deleteDocument(id))) return c.json({ error: "Not found" }, 404);
+  if (!(await deleteDocument(id, await library(c.get("user"))))) return c.json({ error: "Not found" }, 404);
   await audit(c.get("user").sub, "document.delete", id);
   return c.body(null, 204);
 });
 
 
-// Conversations = OpenCode sessions, each owned by the user who created it.
-// Every route with a conversation id checks ownership: someone else's is "not found".
-const ownConversation = createMiddleware<{ Variables: { user: User } }>(async (c, next) => {
-  if (AUTH_ENABLED && (await ownerOf(c.req.param("id") ?? "")) !== c.get("user").sub) {
-    return c.json({ error: "Not found" }, 404);
-  }
+// Conversations = OpenCode sessions, each owned by the user who created it and working in that
+// user's space folder. Every route with a conversation id checks ownership — someone else's is
+// "not found" — and remembers the conversation's folder for the calls below.
+const ownConversation = createMiddleware<{ Variables: { user: User; conversation: ConversationRecord } }>(async (c, next) => {
+  const conversation = await conversationOf(c.req.param("id") ?? "");
+  if (AUTH_ENABLED && conversation?.owner !== c.get("user").sub) return c.json({ error: "Not found" }, 404);
+  c.set("conversation", conversation ?? { owner: c.get("user").sub, spaceId: null, directory: null });
   return next();
 });
+// The folder OpenCode runs a conversation in: its space's — or, for one from before spaces,
+// the old shared folder (still readable; the agent no longer works there).
+const folderOf = (conversation: ConversationRecord) => conversation.directory ?? LEGACY_WORKSPACE;
 app.use("/api/conversations/:id", ownConversation);
 app.use("/api/conversations/:id/*", ownConversation);
 
 app.get("/api/conversations", async (c) => {
-  const sessions = unwrap(await client.session.list({ roots: true, limit: 100 }));
-  const mine = AUTH_ENABLED ? await ownedBy(c.get("user").sub) : undefined;
+  const { sub } = c.get("user");
+  // OpenCode lists sessions per folder: the user's space, plus the old shared folder if they own
+  // conversations from before spaces. Ownership is still checked for each one.
+  const folders = [(await personalSpace(sub)).dir, ...((await ownsLegacy(sub)) ? [LEGACY_WORKSPACE] : [])];
+  const lists = await Promise.all(folders.map((directory) => client.session.list({ directory, roots: true, limit: 200 }).then(unwrap)));
+  const sessions = lists.flat();
+  const mine = AUTH_ENABLED ? await ownedBy(sub) : undefined;
   const conversations = sessions
     .filter((s) => !mine || mine.has(s.id))
     .map(toConversation)
@@ -125,8 +137,10 @@ app.get("/api/conversations", async (c) => {
 });
 
 app.post("/api/conversations", async (c) => {
-  const session = unwrap(await client.session.create({}));
-  await recordOwner(session.id, c.get("user").sub);
+  const { sub } = c.get("user");
+  const space = await personalSpace(sub);
+  const session = unwrap(await client.session.create({ directory: space.dir }));
+  await recordOwner(session.id, sub, space);
   return c.json(toConversation(session));
 });
 
@@ -141,16 +155,17 @@ app.delete("/api/conversations/:id", async (c) => {
 // Full history, whether the agent is still working on it, and safety-filter flags.
 app.get("/api/conversations/:id/messages", async (c) => {
   const sessionID = c.req.param("id");
+  const directory = folderOf(c.get("conversation"));
   const [messages, status, session, permissions] = await Promise.all([
     client.session.messages({ sessionID }).then(unwrap),
-    client.session.status({}).then(unwrap),
+    client.session.status({ directory }).then(unwrap),
     client.session.get({ sessionID }).then(unwrap),
-    client.permission.list({}).then(unwrap),
+    client.permission.list({ directory }).then(unwrap),
   ]);
   const busy = status[sessionID] !== undefined && status[sessionID].type !== "idle";
   const pending = [];
   for (const p of permissions.filter((p) => p.sessionID === sessionID)) {
-    if (!(await autoApprove(p))) pending.push(toPermissionAsk(p)); // already allowed in this chat → answered
+    if (!(await autoApprove(p, directory))) pending.push(toPermissionAsk(p, directory)); // already allowed in this chat → answered
   }
   return c.json({ messages: messages.map(toChatMessage), busy, flags: guardFlags(session), permissions: pending });
 });
@@ -159,7 +174,6 @@ app.get("/api/conversations/:id/messages", async (c) => {
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 const MAX_IMAGES = 4;
 const MAX_DOCUMENTS = 5;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_IMAGE_CHARS = 6 * 1024 * 1024; // data URL length (~4.5 MB of image)
 
 
@@ -168,6 +182,12 @@ const MAX_IMAGE_CHARS = 6 * 1024 * 1024; // data URL length (~4.5 MB of image)
 // arrives on the event stream.
 app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 }), async (c) => {
   const sessionID = c.req.param("id");
+  const { spaceId, directory } = c.get("conversation");
+  // From before spaces: its agent would work in the old shared folder, which may hold everyone's
+  // files. Readable, but closed for new messages.
+  if (!spaceId || !directory) {
+    return c.json({ error: "This conversation is from before personal workspaces. Start a new conversation to continue." }, 409);
+  }
   const body = await c.req.json<PromptRequest>();
   const { text = "", images = [] } = body;
   // Check the shape first: a bad request is the client's mistake (400), not a server error.
@@ -178,7 +198,7 @@ app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 
   const requested = [...new Set((body.documents ?? []).map((d) => d.id.toLowerCase()))];
   if (requested.length > MAX_DOCUMENTS) return c.json({ error: `At most ${MAX_DOCUMENTS} documents per message` }, 400);
   // Names come from the library, not from the request: the model only ever sees real documents.
-  const documents = await readyDocuments(requested);
+  const documents = await readyDocuments(requested, spaceId);
   if (documents.length < requested.length) {
     return c.json({ error: "An attached document isn't ready (still indexing, failed, or deleted)." }, 409);
   }
@@ -219,7 +239,7 @@ app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 
       ...images.map((image) => ({ type: "file" as const, mime: image.mime, filename: image.name, url: image.dataUrl })),
     ],
   }));
-  void reviewWhenDone(sessionID, text || (documents.length ? "(documents)" : "(image)"), think); // check the reply once the agent finishes
+  void reviewWhenDone(sessionID, directory, text || (documents.length ? "(documents)" : "(image)"), think); // check the reply once the agent finishes
   return c.body(null, 204);
 });
 
@@ -227,7 +247,7 @@ app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 
 // (not typed by the user); the metadata lets server/translate.ts show it as file chips.
 function attachedDocumentsPart(documents: AttachedDocument[]) {
   // Names are quoted and escaped (JSON), so a file name can't close the note and add its own
-  // "instructions" (the library is shared: one user's upload could target another's chat).
+  // "instructions" (in a company space, one person's upload would end up in a colleague's chat).
   const names = documents.map((d) => JSON.stringify(cleanName(d.name))).join(", ");
   const one = documents.length === 1;
   return {
@@ -247,13 +267,13 @@ const NUDGE = "(Write your final answer to my last question now, based on what y
 // filter on it and store any flag in the session's metadata (shown in the UI, survives reloads).
 // Note: this runs in the api pod that received the prompt; if that pod stops first,
 // it's skipped. A production system would hand this to a queue/worker.
-async function reviewWhenDone(sessionID: string, prompt: string, think: boolean) {
+async function reviewWhenDone(sessionID: string, directory: string, prompt: string, think: boolean) {
   try {
     let nudged = false;
     const deadline = Date.now() + 15 * 60_000;
     while (Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      const status = unwrap(await client.session.status({}));
+      const status = unwrap(await client.session.status({ directory }));
       if (status[sessionID] && status[sessionID].type !== "idle") continue;
 
       const messages = unwrap(await client.session.messages({ sessionID }));
@@ -306,14 +326,15 @@ app.post("/api/conversations/:id/permissions/:requestID", async (c) => {
   // The harness knows nothing about users: make sure this request belongs to THIS conversation
   // (which ownConversation already checked is the caller's).
   const requestID = c.req.param("requestID");
-  const pending = unwrap(await client.permission.list({}));
+  const directory = folderOf(c.get("conversation"));
+  const pending = unwrap(await client.permission.list({ directory }));
   const request = pending.find((p) => p.id === requestID && p.sessionID === c.req.param("id"));
   if (!request) return c.json({ error: "Approval request not found" }, 404);
   // "Allow for this chat": sent to OpenCode as "once" — its own "always" would allow it for every
   // chat of every user — and remembered for THIS conversation only (server/approvals.ts), once
   // OpenCode took the answer: of two racing clicks (a double-click, "Allow" in one tab and "Deny"
   // in another) only the one OpenCode accepted counts.
-  check(await client.permission.reply({ requestID, reply: reply === "always" ? "once" : reply }));
+  check(await client.permission.reply({ requestID, reply: reply === "always" ? "once" : reply, directory }));
   if (reply === "always") await rememberForConversation(request);
   const action = reply === "always" ? "approval.this_chat" : reply === "once" ? "approval.once" : "approval.deny";
   await audit(c.get("user").sub, action, request.sessionID, { permission: request.permission, patterns: request.patterns });
@@ -331,6 +352,7 @@ app.post("/api/conversations/:id/abort", async (c) => {
 // Live stream of what the agent is doing in this conversation (Server-Sent Events).
 app.get("/api/conversations/:id/events", (c) => {
   const sessionID = c.req.param("id");
+  const directory = folderOf(c.get("conversation"));
   const send = (stream: { writeSSE(m: { data: string }): Promise<void> }, event: ChatEvent) =>
     stream.writeSSE({ data: JSON.stringify(event) });
 
@@ -338,14 +360,15 @@ app.get("/api/conversations/:id/events", (c) => {
     const abort = new AbortController();
     stream.onAbort(() => abort.abort()); // browser closed the stream → stop listening to OpenCode
 
-    const events = await client.event.subscribe({}, { signal: abort.signal });
+    // OpenCode's event stream for this conversation's folder (it carries only that folder's events).
+    const events = await client.event.subscribe({ directory }, { signal: abort.signal });
     try {
       for await (const event of events.stream) {
         // OpenCode greets every new subscriber; only now is it safe for the UI to send a prompt.
         if (event.type === "server.connected") await send(stream, { type: "ready" });
         if (sessionOf(event) !== sessionID) continue;
-        if (event.type === "permission.asked" && (await autoApprove(event.properties))) continue;
-        const chatEvent = toChatEvent(event);
+        if (event.type === "permission.asked" && (await autoApprove(event.properties, directory))) continue;
+        const chatEvent = toChatEvent(event, directory);
         if (chatEvent) await send(stream, chatEvent);
       }
     } catch (err) {
@@ -374,12 +397,10 @@ const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
   console.log(`seyl-ai backend running at http://${HOST}:${PORT}`);
 });
 
-// MCP tool server for the agent (server/mcp.ts) — its own listener, reachable only inside
-// the cluster (Service port 3001), never through nginx.
-const mcpApp = new Hono();
-mcpApp.route("/mcp", mcp);
-const mcpServer = serve({ fetch: mcpApp.fetch, port: MCP_PORT, hostname: HOST }, () => {
-  console.log(`MCP tool server running at http://${HOST}:${MCP_PORT}/mcp`);
+// The agent's document tools call in here (server/tools.ts) — its own listener, reachable only
+// inside the cluster (Service port 3001), never through nginx.
+const mcpServer = serve({ fetch: tools.fetch, port: MCP_PORT, hostname: HOST }, () => {
+  console.log(`agent tools endpoint running at http://${HOST}:${MCP_PORT}/internal/docs`);
 });
 
 // Graceful shutdown: Docker/Kubernetes send SIGTERM before stopping a container.

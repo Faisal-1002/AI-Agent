@@ -6,11 +6,8 @@ const ACTIONS: Record<string, string> = {
   edit: "change files",
   bash: "run a command",
   webfetch: "open a web page",
-  external_directory: "work outside the workspace",
+  external_directory: "work outside your workspace",
 };
-
-// Paths arrive absolute (/workspace/notes.md); show them relative to the workspace.
-const shortPath = (file: string) => file.replace(/^.*?\/workspace\//, "").replace(/^.*[\\/]workspace[\\/]/, "");
 
 // The agent is paused, waiting for the user to approve an action (e.g. editing a file).
 export function PermissionCard({ ask, onAnswer }: { ask: PermissionAsk; onAnswer: (reply: PermissionReply) => void }) {
@@ -25,7 +22,7 @@ export function PermissionCard({ ask, onAnswer }: { ask: PermissionAsk; onAnswer
           <div className="min-w-0 flex-1">
             <div className="font-medium">seyl-ai wants to {what}</div>
             {ask.files.length > 0 && (
-              <div className="truncate font-mono text-sm text-text-secondary">{ask.files.map(shortPath).join(", ")}</div>
+              <div className="truncate font-mono text-sm text-text-secondary">{ask.files.join(", ")}</div>
             )}
           </div>
         </div>

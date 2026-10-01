@@ -6,6 +6,7 @@
 
 import { randomBytes } from "node:crypto";
 import { keycloakAdmin } from "./lib/keycloak-admin.js";
+import { removeUserData } from "./lib/live.js";
 import { Session } from "./lib/session.js";
 
 try {
@@ -93,6 +94,11 @@ try {
   // Delete every temporary user, even if one deletion fails.
   let deleted = 0;
   for (const id of created) {
+    try {
+      removeUserData(id); // their space, its folder, ownership rows (Keycloak id = OIDC sub)
+    } catch (err) {
+      console.warn(`! could not remove the data of ${id}: ${(err as Error).message}`);
+    }
     const res = await kc(`/users/${id}`, { method: "DELETE" }).catch(() => undefined);
     if (res?.ok) deleted++;
     else console.warn(`! could not delete temporary user ${id} — remove it in the Keycloak admin console`);

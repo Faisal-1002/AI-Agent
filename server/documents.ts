@@ -4,9 +4,14 @@ import { DOCUMENT_TYPES, type AttachedDocument, type DocumentInfo } from "../sha
 import { chunkText } from "./chunk.js";
 import { sql } from "./db.js";
 import { LLM_GATEWAY_URL } from "./opencode.js";
+import { UUID } from "./paths.js";
 
 // "Chat with your documents" (RAG): upload → extract text → chunks → embeddings → Postgres
-// (pgvector). The agent searches them through MCP tools (server/mcp.ts).
+// (pgvector). The agent searches them with its docs tools (server/tools.ts), devices through MCP
+// (server/mcp.ts).
+//
+// Every document belongs to a space (server/spaces.ts) and EVERY query here takes the space it may
+// look in: someone else's document behaves exactly like one that doesn't exist.
 
 const API_KEY = process.env.LITELLM_KEY_API;
 const EMBEDDING_MODEL = "qwen3-embedding";
@@ -71,20 +76,25 @@ const toInfo = (r: Row): DocumentInfo => ({
   createdAt: r.created_at.toISOString(),
 });
 
-export async function listDocuments(): Promise<DocumentInfo[]> {
-  const rows = await sql<Row[]>`SELECT id, name, type, size, status, error, chunk_count, created_at FROM documents ORDER BY created_at DESC`;
+export async function listDocuments(space: string): Promise<DocumentInfo[]> {
+  const rows = await sql<Row[]>`
+    SELECT id, name, type, size, status, error, chunk_count, created_at FROM documents
+    WHERE space_id = ${space} ORDER BY created_at DESC`;
   return rows.map(toInfo);
 }
 
-// The attached documents that are ready to read (unknown or still-indexing ids are left out).
-export async function readyDocuments(ids: string[]): Promise<AttachedDocument[]> {
-  const valid = ids.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+// The attached documents that are ready to read (unknown, someone else's or still-indexing ids
+// are left out).
+export async function readyDocuments(ids: string[], space: string): Promise<AttachedDocument[]> {
+  const valid = ids.filter((id) => UUID.test(id));
   if (valid.length === 0) return [];
-  return sql<AttachedDocument[]>`SELECT id, name FROM documents WHERE id = ANY(${valid}::uuid[]) AND status = 'ready'`;
+  return sql<AttachedDocument[]>`
+    SELECT id, name FROM documents WHERE id = ANY(${valid}::uuid[]) AND space_id = ${space} AND status = 'ready'`;
 }
 
-export async function deleteDocument(id: string): Promise<boolean> {
-  const rows = await sql`DELETE FROM documents WHERE id = ${id} RETURNING id`; // chunks go too (ON DELETE CASCADE)
+export async function deleteDocument(id: string, space: string): Promise<boolean> {
+  if (!UUID.test(id)) return false;
+  const rows = await sql`DELETE FROM documents WHERE id = ${id} AND space_id = ${space} RETURNING id`; // chunks go too (ON DELETE CASCADE)
   return rows.length > 0;
 }
 
@@ -96,10 +106,11 @@ export function cleanName(name: string): string {
 }
 
 // Store the upload and start indexing in the background; returns right away.
-export async function addDocument(file: File): Promise<DocumentInfo> {
+export async function addDocument(file: File, space: string, uploadedBy: string): Promise<DocumentInfo> {
   const type = fileType(file.name);
   const [row] = await sql<Row[]>`
-    INSERT INTO documents (name, type, size) VALUES (${cleanName(file.name)}, ${type}, ${file.size})
+    INSERT INTO documents (name, type, size, space_id, uploaded_by)
+    VALUES (${cleanName(file.name)}, ${type}, ${file.size}, ${space}, ${uploadedBy})
     RETURNING id, name, type, size, status, error, chunk_count, created_at`;
   void indexDocument(row.id, type, new Uint8Array(await file.arrayBuffer()));
   return toInfo(row);
@@ -126,27 +137,37 @@ async function indexDocument(id: string, type: string, bytes: Uint8Array) {
   }
 }
 
-// ── Search & read (used by the MCP tools) ────────────────────────────────────
+// ── Search & read (used by the docs tools) ───────────────────────────────────
 
 export type SearchHit = { document: string; position: number; score: number; content: string };
 
-export async function searchDocuments(query: string, limit = 5): Promise<SearchHit[]> {
+export async function searchDocuments(query: string, space: string, limit = 5): Promise<SearchHit[]> {
   const [vector] = await embed([QUERY_INSTRUCTION + query]);
   // <=> is pgvector's cosine distance; 1 − distance = similarity (higher is closer).
-  return sql<SearchHit[]>`
-    SELECT d.name AS document, c.position, 1 - (c.embedding <=> ${toVector(vector)}::vector) AS score, c.content
-    FROM chunks c JOIN documents d ON d.id = c.document_id
-    WHERE d.status = 'ready'
-    ORDER BY c.embedding <=> ${toVector(vector)}::vector
-    LIMIT ${limit}`;
+  // The HNSW index finds the nearest passages of EVERYONE first and filters by space after: with
+  // a small library that can leave too few. Iterative scan (pgvector 0.8) keeps looking until
+  // there are enough of this space's own — still in exact order.
+  return sql.begin(async (tx) => {
+    await tx`SET LOCAL hnsw.iterative_scan = strict_order`;
+    return tx<SearchHit[]>`
+      SELECT d.name AS document, c.position, 1 - (c.embedding <=> ${toVector(vector)}::vector) AS score, c.content
+      FROM chunks c JOIN documents d ON d.id = c.document_id
+      WHERE d.status = 'ready' AND d.space_id = ${space}
+      ORDER BY c.embedding <=> ${toVector(vector)}::vector
+      LIMIT ${limit}`;
+  });
 }
 
-const PAGE_CHARS = 6000;
+// A page stays under the 16 KB the agent gets per tool result even in Arabic or Chinese (2–3 bytes
+// a character); a longer one would be cut off, with the rest in a file the agent may not open.
+const PAGE_CHARS = 5000;
 
 // A document's full text, a page at a time (so a long file doesn't flood the context).
-export async function readDocument(name: string, page = 1) {
+export async function readDocument(name: string, space: string, page = 1) {
   const [doc] = await sql<{ name: string; content: string }[]>`
-    SELECT name, content FROM documents WHERE status = 'ready' AND lower(name) = lower(${name}) ORDER BY created_at DESC LIMIT 1`;
+    SELECT name, content FROM documents
+    WHERE space_id = ${space} AND status = 'ready' AND lower(name) = lower(${name})
+    ORDER BY created_at DESC LIMIT 1`;
   if (!doc) return undefined;
   const pages = Math.max(1, Math.ceil(doc.content.length / PAGE_CHARS));
   const p = Math.min(Math.max(1, page), pages);

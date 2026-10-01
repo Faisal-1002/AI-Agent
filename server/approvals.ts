@@ -2,15 +2,17 @@ import type { PermissionRequest } from "@opencode-ai/sdk/v2";
 import { audit } from "./audit.js";
 import { sql } from "./db.js";
 import { client } from "./opencode.js";
-import { ownerOf } from "./owners.js";
+import { conversationOf } from "./owners.js";
 
 // "Allow for this chat" — really for this chat.
 //
-// OpenCode's own "always" reply adds an allow rule to the WHOLE harness: every conversation of
-// every user, until it restarts (its edit tool's "always" pattern is "*"). So Seyl never sends
-// "always". It stores the approval as a rule for ONE conversation, answers OpenCode "once",
-// and from then on answers matching requests in that conversation "once" by itself — whether
-// or not anyone has the chat open (watchApprovals).
+// OpenCode's own "always" reply adds an allow rule to the WHOLE folder (every conversation in it,
+// until it restarts; its edit tool's "always" pattern is "*"). So Seyl never sends "always". It
+// stores the approval as a rule for ONE conversation, answers OpenCode "once", and from then on
+// answers matching requests in that conversation "once" by itself — whether or not anyone has the
+// chat open (watchApprovals).
+//
+// OpenCode keeps pending requests per folder: every list and reply names the conversation's folder.
 
 const key = (patterns: string[]) => JSON.stringify([...patterns].sort());
 
@@ -36,15 +38,15 @@ async function allowedHere(request: PermissionRequest): Promise<boolean> {
 // Answer a request "once" if its conversation already allowed this kind of request. Returns
 // true when it is answered (the UI then doesn't need to ask). Several streams and api pods may
 // try at the same moment: OpenCode accepts the first reply, and the others see it's gone.
-export async function autoApprove(request: PermissionRequest): Promise<boolean> {
+export async function autoApprove(request: PermissionRequest, directory: string): Promise<boolean> {
   try {
     if (!(await allowedHere(request))) return false;
-    const res = await client.permission.reply({ requestID: request.id, reply: "once" });
+    const res = await client.permission.reply({ requestID: request.id, reply: "once", directory });
     if (res.error !== undefined) {
-      const pending = (await client.permission.list({})).data;
+      const pending = (await client.permission.list({ directory })).data;
       return pending !== undefined && !pending.some((p) => p.id === request.id); // answered elsewhere
     }
-    const owner = (await ownerOf(request.sessionID)) ?? "unknown";
+    const owner = (await conversationOf(request.sessionID))?.owner ?? "unknown";
     await audit(owner, "approval.auto", request.sessionID, { permission: request.permission, patterns: request.patterns });
     return true;
   } catch {
@@ -52,24 +54,36 @@ export async function autoApprove(request: PermissionRequest): Promise<boolean> 
   }
 }
 
-// Answer whatever is waiting and already allowed — e.g. after a reconnect, or right after
-// "Allow for this chat" when the agent asked for several things at once.
+// Answer whatever is waiting and already allowed — after "Allow for this chat" when the agent
+// asked for several things at once (one conversation), or after a reconnect (every conversation
+// that has rules: only those folders, so idle users' folders aren't woken up).
 export async function approvePending(sessionID?: string): Promise<void> {
-  const pending = (await client.permission.list({})).data ?? [];
-  for (const request of pending) if (!sessionID || request.sessionID === sessionID) await autoApprove(request);
+  const folders = sessionID
+    ? [(await conversationOf(sessionID))?.directory].filter((d): d is string => !!d)
+    : (await sql<{ directory: string }[]>`
+        SELECT DISTINCT o.directory FROM approval_rules r
+        JOIN conversation_owners o ON o.conversation_id = r.session_id
+        WHERE o.directory IS NOT NULL`).map((r) => r.directory);
+  for (const directory of folders) {
+    const pending = (await client.permission.list({ directory })).data ?? [];
+    for (const request of pending) if (!sessionID || request.sessionID === sessionID) await autoApprove(request, directory);
+  }
 }
 
-// One watcher per api process, so an allowed request is answered even when nobody has its chat
-// open (otherwise the agent would wait until someone reopens it). Runs for the process's life.
+// One watcher per api process, on OpenCode's GLOBAL event stream (every folder's events, each
+// with its folder), so an allowed request is answered even when nobody has its chat open
+// (otherwise the agent would wait until someone reopens it). Runs for the process's life.
 export async function watchApprovals(): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     try {
-      const events = await client.event.subscribe({});
+      const events = await client.global.event();
       for await (const event of events.stream) {
         attempt = 1;
-        // OpenCode greets every (re)connected subscriber: catch up on what was asked meanwhile.
-        if (event.type === "server.connected") void approvePending().catch(() => {});
-        if (event.type === "permission.asked") void autoApprove(event.properties);
+        const { directory, payload } = event as { directory?: string; payload?: { type?: string; properties?: unknown } };
+        // OpenCode greets every (re)connection — the SDK reconnects by itself, so this is the only
+        // sign of one: catch up on what was asked while we weren't listening.
+        if (payload?.type === "server.connected") void approvePending().catch(() => {});
+        if (directory && payload?.type === "permission.asked") void autoApprove(payload.properties as PermissionRequest, directory);
       }
     } catch (err) {
       console.error(`[approvals] event stream lost (attempt ${attempt}): ${(err as Error).message}`);

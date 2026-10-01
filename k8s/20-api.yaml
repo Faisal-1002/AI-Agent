@@ -20,6 +20,8 @@ spec:
           env:
             - name: OPENCODE_URL
               value: http://harness:4097
+            - name: SEYL_HARNESS_ADMIN_URL # the harness creates the spaces' folders
+              value: http://harness:4098
             - name: LLM_GATEWAY_URL # voice goes through the gateway too
               value: http://litellm:4000
             - name: LITELLM_KEY_API # this pod's own key: guard, voice and embedding models only
@@ -33,7 +35,7 @@ spec:
             - name: SEYL_DB_PASSWORD
               valueFrom:
                 secretKeyRef: { name: seyl-secrets, key: SEYL_DB_PASSWORD }
-            - name: SEYL_MCP_TOKEN # the harness must present this to use /mcp
+            - name: SEYL_MCP_TOKEN # the agent's document tools must present this (server/tools.ts)
               valueFrom:
                 secretKeyRef: { name: seyl-secrets, key: SEYL_MCP_TOKEN }
             - name: OPENCODE_SERVER_PASSWORD # to talk to the harness (OpenCode's HTTP Basic auth)

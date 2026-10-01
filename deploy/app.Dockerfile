@@ -25,20 +25,27 @@ RUN npm ci --omit=dev --ignore-scripts
 COPY server ./server
 COPY shared ./shared
 COPY --chown=node:node workspace /workspace
-# A second copy that seeds the persistent workspace volume the first time (k8s initContainer).
+# The starter files every new space gets (server/harness.ts copies them into its folder).
 COPY --chown=node:node workspace /workspace-seed
+# OpenCode's config folder with our custom tools (the docs_* tools). Owned by root, so neither the
+# agent nor OpenCode can change it — and OpenCode doesn't try to npm-install anything into it.
+COPY harness-config/opencode/tools /opt/seyl/config/opencode/tools
+COPY harness-config/opencode/.gitignore /opt/seyl/config/opencode/.gitignore
 
-# OpenCode keeps sessions, caches and downloaded provider packages under XDG dirs.
-# Point them all at /data so one volume persists everything.
+# OpenCode keeps sessions, caches and downloaded provider packages under XDG dirs: /data, so one
+# volume persists everything — the spaces' folders too (/data/workspaces). Its CONFIG is the
+# read-only /opt/seyl/config above.
 RUN mkdir -p /data && chown node:node /data
 ENV NODE_ENV=production \
     SEYL_WORKSPACE=/workspace \
+    SEYL_WORKSPACES_ROOT=/data/workspaces \
+    SEYL_WORKSPACE_SEED=/workspace-seed \
     HOST=0.0.0.0 \
     OPENCODE_HOSTNAME=0.0.0.0 \
     XDG_DATA_HOME=/data/share \
     XDG_CACHE_HOME=/data/cache \
     XDG_STATE_HOME=/data/state \
-    XDG_CONFIG_HOME=/data/config
+    XDG_CONFIG_HOME=/opt/seyl/config
 
 # Don't run as root.
 USER node

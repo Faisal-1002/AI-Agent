@@ -12,12 +12,12 @@ services:
     environment:
       LLM_GATEWAY_URL: http://litellm:4000
       LITELLM_KEY_HARNESS: ${LITELLM_KEY_HARNESS}
-      SEYL_MCP_URL: http://api:3001/mcp # the api's MCP tool server (its own port, not published)
+      SEYL_DOCS_URL: http://api:3001/internal/docs # the agent's document tools call the api here (not published)
       SEYL_MCP_TOKEN: ${SEYL_MCP_TOKEN}
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD}
     volumes:
       - opencode-data:/data # sessions survive restarts
-      - workspace:/workspace # files the agent may edit (Docker seeds it from the image the first time)
+      - workspace:/workspace # the old shared folder from before spaces (spaces live in /data/workspaces)
     depends_on: [litellm]
     # Not published to the PC: only other containers can talk to the harness.
 
@@ -25,6 +25,7 @@ services:
     image: seyl-ai/app:dev
     environment:
       OPENCODE_URL: http://harness:4097
+      SEYL_HARNESS_ADMIN_URL: http://harness:4098 # the harness creates the spaces' folders
       LLM_GATEWAY_URL: http://litellm:4000
       LITELLM_KEY_API: ${LITELLM_KEY_API}
       LITELLM_ADMIN_KEY: ${LITELLM_MASTER_KEY} # creates/revokes per-device gateway keys

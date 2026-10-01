@@ -1,16 +1,28 @@
 import { sql } from "./db.js";
+import type { Space } from "./spaces.js";
 
-// Who owns which conversation. OpenCode's sessions have no notion of users, so seyl-ai
-// keeps the mapping itself (conversation id → the OIDC "sub" of its creator) and every
+// Who owns which conversation, and where its agent works. OpenCode's sessions have no notion of
+// users — any session id works for anyone who can reach the harness — so seyl-ai keeps the mapping
+// itself (conversation id → the OIDC "sub" of its creator + their space and folder), and every
 // conversation route checks it: other people's conversations are simply "not found".
 
-export async function recordOwner(conversationId: string, owner: string) {
-  await sql`INSERT INTO conversation_owners (conversation_id, owner) VALUES (${conversationId}, ${owner}) ON CONFLICT DO NOTHING`;
+export type ConversationRecord = { owner: string; spaceId: string | null; directory: string | null };
+
+export async function recordOwner(conversationId: string, owner: string, space: Space) {
+  await sql`
+    INSERT INTO conversation_owners (conversation_id, owner, space_id, directory)
+    VALUES (${conversationId}, ${owner}, ${space.id}, ${space.dir})
+    ON CONFLICT DO NOTHING`;
+}
+
+export async function conversationOf(conversationId: string): Promise<ConversationRecord | undefined> {
+  const [row] = await sql<{ owner: string; space_id: string | null; directory: string | null }[]>`
+    SELECT owner, space_id, directory FROM conversation_owners WHERE conversation_id = ${conversationId}`;
+  return row && { owner: row.owner, spaceId: row.space_id, directory: row.directory };
 }
 
 export async function ownerOf(conversationId: string): Promise<string | undefined> {
-  const [row] = await sql<{ owner: string }[]>`SELECT owner FROM conversation_owners WHERE conversation_id = ${conversationId}`;
-  return row?.owner;
+  return (await conversationOf(conversationId))?.owner;
 }
 
 export async function ownedBy(owner: string): Promise<Set<string>> {
@@ -18,8 +30,8 @@ export async function ownedBy(owner: string): Promise<Set<string>> {
   return new Set(rows.map((r) => r.conversation_id));
 }
 
-// Conversations created before login existed have no owner: the first user to sign in
-// gets them (on a single-user install, that's the person who made them).
-export async function claimUnowned(conversationIds: string[], owner: string) {
-  for (const id of conversationIds) await recordOwner(id, owner);
+// Does this user own conversations from before spaces (in the old shared folder)?
+export async function ownsLegacy(owner: string): Promise<boolean> {
+  const [row] = await sql`SELECT 1 FROM conversation_owners WHERE owner = ${owner} AND space_id IS NULL LIMIT 1`;
+  return row !== undefined;
 }

@@ -13,8 +13,8 @@ type Props = {
   onDocuments: (files: File[]) => void;
 };
 
-// 📎 → "Upload image" (sent with the message) or "Upload document" (added to the document
-// library — shared by all users for now — and read by the agent for this message), like
+// 📎 → "Upload image" (sent with the message) or "Upload document" (added to the user's own
+// document library and read by the agent for this message), like
 // LibreChat's attach menu.
 export function AttachMenu({ canAttachImages, onImages, onDocuments }: Props) {
   const imageInput = useRef<HTMLInputElement>(null);
@@ -26,7 +26,7 @@ export function AttachMenu({ canAttachImages, onImages, onDocuments }: Props) {
       : []),
     {
       label: "Upload document",
-      hint: "PDF, Word, Markdown, text… · added to the shared library",
+      hint: "PDF, Word, Markdown, text… · added to your library",
       icon: FileText,
       onSelect: () => documentInput.current?.click(),
     },

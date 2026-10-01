@@ -31,9 +31,10 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000 # the volume is writable by the "node" user (uid 1000)
-      # The agent can now edit files (with the user's approval), so the workspace lives on the
-      # persistent volume. On first start it's empty: copy the image's starter files in.
-      # cp -n never overwrites, so the user's edits survive every restart and upgrade.
+      # Every user's files live on this persistent volume, one folder per space (/data/workspaces,
+      # created by server/harness.ts). /workspace is the old shared folder from before spaces:
+      # conversations from back then still point there. On first start it gets the starter files;
+      # cp -n never overwrites, so edits survive every restart and upgrade.
       initContainers:
         - name: seed-workspace
           image: seyl-ai/app:dev
@@ -54,8 +55,8 @@ spec:
             - name: LITELLM_KEY_HARNESS # this pod's own key: chat models only
               valueFrom:
                 secretKeyRef: { name: seyl-secrets, key: LITELLM_KEY_HARNESS }
-            - name: SEYL_MCP_URL # the api's MCP tool server (document tools) — its own port
-              value: http://api:3001/mcp
+            - name: SEYL_DOCS_URL # the agent's document tools call the api here — its internal port
+              value: http://api:3001/internal/docs
             - name: SEYL_MCP_TOKEN
               valueFrom:
                 secretKeyRef: { name: seyl-secrets, key: SEYL_MCP_TOKEN }
@@ -63,7 +64,8 @@ spec:
               valueFrom:
                 secretKeyRef: { name: seyl-secrets, key: OPENCODE_SERVER_PASSWORD }
           ports:
-            - containerPort: 4097
+            - containerPort: 4097 # OpenCode
+            - containerPort: 4098 # admin: creates the spaces' folders (same password)
           volumeMounts:
             - name: data
               mountPath: /data
@@ -86,7 +88,8 @@ spec:
           persistentVolumeClaim:
             claimName: opencode-data
 ---
-# Service = a stable name + address for the pods. Other pods reach it at http://harness:4097.
+# Service = a stable name + address for the pods. Other pods reach it at http://harness:4097
+# (and the admin port at http://harness:4098).
 # ClusterIP (the default) means: reachable only from inside the cluster.
 apiVersion: v1
 kind: Service
@@ -96,5 +99,9 @@ metadata:
 spec:
   selector: { app: harness }
   ports:
-    - port: 4097
+    - name: opencode
+      port: 4097
       targetPort: 4097
+    - name: admin
+      port: 4098
+      targetPort: 4098

@@ -1,6 +1,7 @@
 import type { AssistantMessage, Event, Message, Part, Session } from "@opencode-ai/sdk/v2";
 import type { PermissionRequest } from "@opencode-ai/sdk/v2";
 import type { AttachedDocument, ChatEvent, ChatMessage, ChatPart, Conversation, GuardFlags, PermissionAsk } from "../shared/chat.js";
+import { displayPath } from "./paths.js";
 
 // Translation layer: OpenCode's rich data model → the small model our UI understands.
 
@@ -88,19 +89,20 @@ export function sessionOf(event: Event): string | undefined {
 }
 
 // An approval request from OpenCode → what the UI shows. For edits, OpenCode's metadata
-// usually carries the file path and a diff of the proposed change.
-export function toPermissionAsk(request: PermissionRequest): PermissionAsk {
+// usually carries the file path and a diff of the proposed change. Paths are shown relative to the
+// conversation's folder ("notes.md", not "data/workspaces/<id>/notes.md").
+export function toPermissionAsk(request: PermissionRequest, directory: string): PermissionAsk {
   const meta = request.metadata as { filepath?: string; filePath?: string; diff?: string };
   const file = meta.filepath ?? meta.filePath;
   return {
     id: request.id,
     action: request.permission,
-    files: request.patterns.length ? request.patterns : file ? [file] : [],
+    files: (request.patterns.length ? request.patterns : file ? [file] : []).map((p) => displayPath(p, directory)),
     ...(typeof meta.diff === "string" && { diff: meta.diff }),
   };
 }
 
-export function toChatEvent(event: Event): ChatEvent | undefined {
+export function toChatEvent(event: Event, directory: string): ChatEvent | undefined {
   switch (event.type) {
     case "message.updated": {
       const { info } = event.properties;
@@ -123,7 +125,7 @@ export function toChatEvent(event: Event): ChatEvent | undefined {
     case "session.updated":
       return { type: "session", title: event.properties.info.title, flags: guardFlags(event.properties.info) };
     case "permission.asked":
-      return { type: "permission", ask: toPermissionAsk(event.properties) };
+      return { type: "permission", ask: toPermissionAsk(event.properties, directory) };
     case "permission.replied":
       return { type: "permission-done", id: event.properties.requestID, reply: event.properties.reply };
     case "session.error": {

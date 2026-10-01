@@ -1,14 +1,12 @@
+import "./env.js";
 import { readFileSync } from "node:fs";
-import path from "node:path";
 import { createOpencodeClient, type Config } from "@opencode-ai/sdk/v2";
 import type { ModelInfo } from "../shared/chat.js";
+import { CONTROL_DIR, TOOL_OUTPUT_GLOB } from "./paths.js";
 
 // Settings come from environment variables so the same code runs locally
 // (defaults below), in Docker Compose and in Kubernetes (see k8s/).
-// Locally, secrets come from .env; containers get them from Compose / a Kubernetes Secret.
-try {
-  process.loadEnvFile();
-} catch {}
+// Locally, secrets come from .env (server/env.ts); containers get them from Compose / a Kubernetes Secret.
 const env = process.env;
 
 // Where the OpenCode harness listens (started by server/harness.ts).
@@ -28,19 +26,20 @@ const HARNESS_PASSWORD = env.OPENCODE_SERVER_PASSWORD;
 if (env.NODE_ENV === "production" && (HARNESS_PASSWORD ?? "").length < 32) {
   throw new Error("OPENCODE_SERVER_PASSWORD (32+ characters) is required in production (see .env.example)");
 }
+export const HARNESS_AUTHORIZATION = HARNESS_PASSWORD
+  ? `Basic ${Buffer.from(`${HARNESS_USER}:${HARNESS_PASSWORD}`).toString("base64")}`
+  : undefined;
+
+// The harness's own small admin port (server/harness.ts): creates the spaces' folders, which live
+// on the harness's volume. Same password.
+export const HARNESS_ADMIN_PORT = Number(env.SEYL_HARNESS_ADMIN_PORT ?? OPENCODE_PORT + 1);
+export const HARNESS_ADMIN_URL = env.SEYL_HARNESS_ADMIN_URL ?? `http://127.0.0.1:${HARNESS_ADMIN_PORT}`;
 
 // The LiteLLM gateway (gateway/config.yaml) — the only way the harness reaches a model.
 // It uses its own key, which may call only the chat models (scripts/gateway-keys.ts).
 export const LLM_GATEWAY_URL = env.LLM_GATEWAY_URL ?? "http://127.0.0.1:4000";
 const HARNESS_KEY = env.LITELLM_KEY_HARNESS;
 
-// seyl-ai's MCP tool server (server/mcp.ts, in the api, own port) — the agent's document tools.
-const MCP_URL = env.SEYL_MCP_URL ?? "http://127.0.0.1:3001/mcp";
-const MCP_TOKEN = env.SEYL_MCP_TOKEN ?? "";
-
-// The folder the agent is allowed to work in. OpenCode treats it as its "project".
-// This path is sent to the harness, so it must exist where the *harness* runs.
-export const WORKSPACE = env.SEYL_WORKSPACE ?? path.resolve("workspace");
 
 // Model names as the gateway knows them — not where they run. The gateway maps
 // them to Ollama today; on AWS it could map the same names to Amazon Bedrock.
@@ -56,13 +55,24 @@ export const AGENT = "seyl";
 const SYSTEM_PROMPT = readFileSync(new URL("./prompts/seyl-ai.md", import.meta.url), "utf8");
 export const MODEL_INFO: ModelInfo = { provider: "LiteLLM", name: "Qwen3.5 9B", vision: true };
 
+// File changes need the user's approval — except inside a .git folder (or a .git file), never:
+// with many users, the user IS the one approving, and a .git config can make the git commands
+// OpenCode runs on a folder execute anything. Patterns are paths relative to the file system root
+// ("data/workspaces/<id>/.git/config"); "*" also matches across folders.
+export const EDIT = { "*": "ask", "*/.git": "deny", "*/.git/*": "deny" } as const;
+
+// Nothing outside the conversation's folder — including OpenCode's shared tool-output folder,
+// which it would otherwise allow for every agent (server/paths.ts).
+export const OUTSIDE = { "*": "deny", [TOOL_OUTPUT_GLOB]: "deny" } as const;
+
 // OpenCode configuration, passed straight to the `opencode serve` process.
 // Same shape as an opencode.json file.
 export const config: Config = {
   share: "disabled",
   // Every tool result goes into the model's context. OpenCode's default cap (2,000 lines /
-  // 50 KB ≈ 12k tokens) suits 200k-token cloud models; ours has 32k. Longer output is saved
-  // to a file and the model is told to read the rest in pieces (read with offset, grep).
+  // 50 KB ≈ 12k tokens) suits 200k-token cloud models; ours has 32k. OpenCode saves longer output
+  // to its shared tool-output folder, which our agent may NOT open (other users' output is there):
+  // the system prompt tells the model to narrow its search instead.
   tool_output: { max_lines: 400, max_bytes: 16 * 1024 },
   autoupdate: false,
   model: `gateway/${MAIN_MODEL}`,
@@ -112,8 +122,8 @@ export const config: Config = {
         read: "allow",
         glob: "allow",
         grep: "allow",
-        edit: "ask", // create or change a file (edit, write) — only with the user's approval
-        "docs_*": "allow", // document tools from our MCP server (search, list, read)
+        edit: EDIT, // create or change a file (edit, write) — only with the user's approval
+        "docs_*": "allow", // the document tools (harness-config/opencode/tools/docs.js)
         bash: "deny",
         apply_patch: "deny",
         webfetch: "deny",
@@ -122,37 +132,30 @@ export const config: Config = {
         todowrite: "deny",
         skill: "deny",
         question: "deny", // would pause for an answer the UI can't give yet
-        external_directory: "deny",
+        external_directory: OUTSIDE,
       },
       steps: 12, // at most 12 model calls per message: stops runaway agent loops
     },
   },
-  // MCP servers: tools that live outside OpenCode. "docs" = seyl-ai's document library.
-  mcp: {
-    docs: {
-      type: "remote",
-      url: MCP_URL,
-      headers: { Authorization: `Bearer ${MCP_TOKEN}` },
-      oauth: false,
-      timeout: 30_000,
-    },
-  },
+  // No MCP servers: the document tools are custom tools now (harness-config/opencode/tools/docs.js),
+  // because a custom tool learns WHICH conversation is calling (an MCP server can't tell users apart).
+  mcp: {},
   // What the agent may do on its own ("allow"), only with approval ("ask" — it pauses and
   // the UI shows Allow / Deny), or never ("deny"). File changes need approval; shell
   // commands, web access and anything outside the workspace are off.
   permission: {
-    edit: "ask",
+    edit: EDIT,
     bash: "deny",
     webfetch: "deny",
-    external_directory: "deny",
+    external_directory: OUTSIDE,
   },
 };
 
-// Typed client for the OpenCode HTTP API, scoped to our workspace folder.
+// Typed client for the OpenCode HTTP API. OpenCode runs one "instance" per folder, so every call
+// about a conversation passes that conversation's folder (`directory`); calls about a session id
+// always run in the session's own folder anyway. The default is an empty control folder.
 export const client = createOpencodeClient({
   baseUrl: OPENCODE_URL,
-  directory: WORKSPACE,
-  ...(HARNESS_PASSWORD && {
-    headers: { Authorization: `Basic ${Buffer.from(`${HARNESS_USER}:${HARNESS_PASSWORD}`).toString("base64")}` },
-  }),
+  directory: CONTROL_DIR,
+  ...(HARNESS_AUTHORIZATION && { headers: { Authorization: HARNESS_AUTHORIZATION } }),
 });

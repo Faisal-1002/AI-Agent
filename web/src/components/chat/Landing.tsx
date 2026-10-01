@@ -7,7 +7,7 @@ export function Landing() {
       <Avatar role="assistant" size="lg" />
       <h1 className="text-2xl font-medium text-text-primary">How can I help you today?</h1>
       <p className="max-w-md text-sm text-text-secondary">
-        seyl-ai can read and search the files in its workspace. Try “What&apos;s in notes.md?”
+        seyl-ai can read and search the files in your workspace. Try “What&apos;s in notes.md?”
       </p>
     </div>
   );

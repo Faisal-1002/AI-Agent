@@ -92,6 +92,41 @@ export async function migrate() {
         created_at timestamptz NOT NULL DEFAULT now(),
         PRIMARY KEY (session_id, permission, patterns)
       )`;
+
+    // Spaces (server/spaces.ts): whose files and documents. One personal space per user today;
+    // company spaces (shared by a team) can come later without moving anything.
+    await tx`
+      CREATE TABLE IF NOT EXISTS spaces (
+        id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        kind       text NOT NULL DEFAULT 'personal',
+        owner_sub  text,
+        created_at timestamptz NOT NULL DEFAULT now()
+      )`;
+    await tx`CREATE UNIQUE INDEX IF NOT EXISTS spaces_personal_idx ON spaces (owner_sub) WHERE kind = 'personal'`;
+    // Each document belongs to a space. Documents from before spaces have none: nobody sees them
+    // until server/spaces.ts gives them to the owner of the old conversations.
+    await tx`ALTER TABLE documents ADD COLUMN IF NOT EXISTS space_id uuid REFERENCES spaces(id) ON DELETE CASCADE`;
+    await tx`ALTER TABLE documents ADD COLUMN IF NOT EXISTS uploaded_by text`;
+    await tx`CREATE INDEX IF NOT EXISTS documents_space_idx ON documents (space_id, created_at DESC)`;
+    // Each conversation: its space and the folder its agent works in (none = from before spaces).
+    await tx`ALTER TABLE conversation_owners ADD COLUMN IF NOT EXISTS space_id uuid`;
+    await tx`ALTER TABLE conversation_owners ADD COLUMN IF NOT EXISTS directory text`;
+    // Upgrading from before spaces: who owned the conversations back then, recorded ONCE — at the
+    // first migration, when every existing conversation is still without a space — so rows written
+    // later (say, by an old api pod during a rolling update) never count. Only a single owner gets
+    // the old library and folder (server/spaces.ts); with several, nobody does: an admin decides.
+    await tx`
+      CREATE TABLE IF NOT EXISTS spaces_upgrade (
+        id             integer PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+        legacy_owner   text,
+        legacy_owners  integer NOT NULL,
+        recorded_at    timestamptz NOT NULL DEFAULT now()
+      )`;
+    await tx`
+      INSERT INTO spaces_upgrade (id, legacy_owner, legacy_owners)
+      SELECT 1, CASE WHEN count(DISTINCT owner) = 1 THEN min(owner) END, count(DISTINCT owner)
+      FROM conversation_owners WHERE space_id IS NULL
+      ON CONFLICT (id) DO NOTHING`;
   });
 
   // The audit log is NOT created here: the api's own user may only add and read rows, so it
