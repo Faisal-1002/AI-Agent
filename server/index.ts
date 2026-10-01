@@ -309,15 +309,15 @@ app.post("/api/conversations/:id/permissions/:requestID", async (c) => {
   const pending = unwrap(await client.permission.list({}));
   const request = pending.find((p) => p.id === requestID && p.sessionID === c.req.param("id"));
   if (!request) return c.json({ error: "Approval request not found" }, 404);
-  // "Allow for this chat": remembered for THIS conversation only (server/approvals.ts) and sent
-  // to OpenCode as "once" — its own "always" would allow it for every chat of every user.
-  const undo = reply === "always" ? await rememberForConversation(request) : undefined;
-  const res = await client.permission.reply({ requestID, reply: reply === "always" ? "once" : reply });
-  if (res.error !== undefined) await undo?.(); // not answered → nothing allowed either
-  check(res);
+  // "Allow for this chat": sent to OpenCode as "once" — its own "always" would allow it for every
+  // chat of every user — and remembered for THIS conversation only (server/approvals.ts), once
+  // OpenCode took the answer: of two racing clicks (a double-click, "Allow" in one tab and "Deny"
+  // in another) only the one OpenCode accepted counts.
+  check(await client.permission.reply({ requestID, reply: reply === "always" ? "once" : reply }));
+  if (reply === "always") await rememberForConversation(request);
   const action = reply === "always" ? "approval.this_chat" : reply === "once" ? "approval.once" : "approval.deny";
   await audit(c.get("user").sub, action, request.sessionID, { permission: request.permission, patterns: request.patterns });
-  // Whatever else the agent asked for at the same time, and this rule now covers.
+  // Whatever the agent asked for meanwhile, or at the same time, that this rule now covers.
   if (reply === "always") await approvePending(request.sessionID).catch(() => {});
   return c.body(null, 204);
 });

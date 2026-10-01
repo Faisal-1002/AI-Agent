@@ -15,22 +15,13 @@ import { ownerOf } from "./owners.js";
 const key = (patterns: string[]) => JSON.stringify([...patterns].sort());
 
 // Remember "allow this kind of request in this conversation" — the same patterns OpenCode's
-// "always" would have used (request.always), scoped to one conversation. Returns an undo, for
-// when the reply that goes with it fails.
-export async function rememberForConversation(request: PermissionRequest): Promise<() => Promise<void>> {
-  const patterns = key(request.always?.length ? request.always : request.patterns);
-  const added = await sql`
+// "always" would have used (request.always), scoped to one conversation.
+export async function rememberForConversation(request: PermissionRequest): Promise<void> {
+  const patterns = request.always?.length ? request.always : request.patterns;
+  await sql`
     INSERT INTO approval_rules (session_id, permission, patterns)
-    VALUES (${request.sessionID}, ${request.permission}, ${patterns})
-    ON CONFLICT DO NOTHING
-    RETURNING 1`;
-  return async () => {
-    if (added.length) {
-      await sql`
-        DELETE FROM approval_rules
-        WHERE session_id = ${request.sessionID} AND permission = ${request.permission} AND patterns = ${patterns}`;
-    }
-  };
+    VALUES (${request.sessionID}, ${request.permission}, ${key(patterns)})
+    ON CONFLICT DO NOTHING`;
 }
 
 // A rule covers a request when it allows everything ("*") or every pattern asked for.

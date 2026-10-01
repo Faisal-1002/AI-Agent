@@ -393,11 +393,13 @@ Who did what, and when — in the `audit.log` table (`server/audit.ts`): sign-in
 and disconnected, every approval answer (once / this chat / automatic / deny), documents uploaded and deleted,
 conversations deleted, and messages the safety filter blocked. Only actions and ids — never message text or secrets.
 
-**Append-only, enforced by the database**: the api's database user may only `INSERT` and `SELECT` there. The
-`audit` schema and its table belong to a separate role (`seyl_audit`, nobody logs in as it), and a trigger refuses
-`UPDATE`, `DELETE` and `TRUNCATE` even if someone grants them later — so neither a bug nor an injected query can
-rewrite history. `npm run db:setup` creates it and then proves it: as the api's user it tries `UPDATE`, `DELETE`,
-`TRUNCATE`, disabling the trigger, `DROP TABLE` and `DROP SCHEMA` — all must fail. (A database admin still could;
+**Append-only, enforced by the database**: the api's database user may only `SELECT` there, and `INSERT` the
+`actor`, `action`, `target` and `detail` columns — the database sets the time and the id, so an entry can't be
+backdated. The `audit` schema and its table belong to a separate role (`seyl_audit`, nobody logs in as it), and a
+trigger refuses `UPDATE`, `DELETE` and `TRUNCATE` even if someone grants them later — so neither a bug nor an
+injected query can rewrite history. `npm run db:setup` creates it and then proves it: as the api's user it tries to
+update, delete, truncate, disable the trigger, drop the table or schema, backdate an entry, pick its id and reset the
+id counter — all must fail. (A database admin still could;
 a hosted Seyl would ship the log to a separate store.) Writing to it never fails the action itself — a failed write
 is logged, and the api warns at startup if the log is missing.
 
@@ -654,7 +656,10 @@ On every push to `main` and every pull request, GitHub runs `.github/workflows/c
 
 `npm run license:check` reads every npm package's license from `package-lock.json` and fails on anything that
 isn't permissive (MIT, Apache-2.0, BSD, ISC, …); MPL-2.0 is accepted only for build tools that never ship.
-The integration tests (`auth:test`, `devices:test`, `guard:eval`) need the running stack, so they stay local.
+The integration tests (`auth:test`, `devices:test`, `approvals:test`, `guard:eval`) need the running stack, so they
+stay local. `npm run approvals:test` has a temporary user approve one edit "for this chat", then checks that the
+next edit in that chat goes through with no browser open, that another chat is asked again, what the audit log
+recorded, that the log can't be changed, and that the harness refuses requests without its password.
 
 ## Project layout
 
@@ -687,6 +692,7 @@ The integration tests (`auth:test`, `devices:test`, `guard:eval`) need the runni
 | `scripts/license-check.ts` | Fails on any npm dependency without a permissive license (`npm run license:check`) |
 | `server/devices.ts`, `web/src/components/devices/DevicesPanel.tsx`, `web/src/lib/deviceConfig.ts` | Connect a device: per-user gateway keys + MCP tokens, the generated opencode.json |
 | `scripts/devices-test.ts` | Device security test (`npm run devices:test`) |
+| `scripts/approvals-test.ts` | Approvals + audit log test, live (`npm run approvals:test`) |
 | `keycloak/themes/seyl`, `deploy/keycloak.Dockerfile` | Keycloak login theme in the app's (LibreChat's) design, baked into `seyl-ai/keycloak` |
 | `scripts/lib/keycloak-admin.ts` | Reach Keycloak's admin API directly (starts a port-forward if needed) |
 | `web/src/components/input/AttachMenu.tsx`, `Attachments.tsx`, `web/src/hooks/useAttachments.ts` | 📎 menu (image / document), attachment chips, upload + indexing status |

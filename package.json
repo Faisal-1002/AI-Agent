@@ -19,6 +19,7 @@
     "auth:setup": "tsx scripts/auth-setup.ts",
     "auth:test": "tsx scripts/auth-test.ts",
     "devices:test": "tsx scripts/devices-test.ts",
+    "approvals:test": "tsx scripts/approvals-test.ts",
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",
     "license:check": "tsx scripts/license-check.ts"
   },

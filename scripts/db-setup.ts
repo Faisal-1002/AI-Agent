@@ -77,7 +77,10 @@ await adminOnSeyl.begin(async (tx) => {
   await tx.unsafe("REVOKE ALL ON SCHEMA audit FROM PUBLIC");
   await tx.unsafe("REVOKE ALL ON audit.log FROM PUBLIC");
   await tx.unsafe("GRANT USAGE ON SCHEMA audit TO seyl");
-  await tx.unsafe("GRANT SELECT, INSERT ON audit.log TO seyl");
+  // Only these columns: the database itself sets the time and the id, so the api can't backdate
+  // an entry or fill a gap. (REVOKE first: an older setup granted INSERT on every column.)
+  await tx.unsafe("REVOKE INSERT ON audit.log FROM seyl");
+  await tx.unsafe("GRANT SELECT, INSERT (actor, action, target, detail) ON audit.log TO seyl");
   await tx.unsafe("GRANT USAGE ON SEQUENCE audit.log_id_seq TO seyl");
 });
 await adminOnSeyl.end();
@@ -90,17 +93,20 @@ const refused: string[] = [];
 await asApi
   .begin(async (tx) => {
     await tx`INSERT INTO audit.log (actor, action) VALUES ('db-setup', 'setup.check')`;
-    for (const statement of [
-      "UPDATE audit.log SET actor = 'someone else'",
-      "DELETE FROM audit.log",
-      "TRUNCATE audit.log",
-      "ALTER TABLE audit.log DISABLE TRIGGER ALL",
-      "DROP TABLE audit.log",
-      "DROP SCHEMA audit CASCADE",
+    for (const [what, statement] of [
+      ["update", "UPDATE audit.log SET actor = 'someone else'"],
+      ["delete", "DELETE FROM audit.log"],
+      ["truncate", "TRUNCATE audit.log"],
+      ["disable the trigger", "ALTER TABLE audit.log DISABLE TRIGGER ALL"],
+      ["drop the table", "DROP TABLE audit.log"],
+      ["drop the schema", "DROP SCHEMA audit CASCADE"],
+      ["backdate", "INSERT INTO audit.log (at, actor, action) VALUES ('2020-01-01', 'db-setup', 'setup.check')"],
+      ["choose the id", "INSERT INTO audit.log (id, actor, action) VALUES (1, 'db-setup', 'setup.check')"],
+      ["reset the id counter", "SELECT setval('audit.log_id_seq', 1)"],
     ]) {
       const allowed = await tx.savepoint((sp) => sp.unsafe(statement)).then(() => true, () => false);
       if (allowed) throw new Error(`the api's database user could run: ${statement}`);
-      refused.push(statement.split(" ").slice(0, 2).join(" "));
+      refused.push(what);
     }
     throw ROLLBACK;
   })
@@ -108,6 +114,6 @@ await asApi
     if (err !== ROLLBACK) throw err;
   });
 await asApi.end();
-console.log(`✓ audit log: the api can add and read; refused ${refused.join(", ")}`);
+console.log(`✓ audit log: the api can add and read, but not ${refused.join(", ")}`);
 
 await admin.end();
