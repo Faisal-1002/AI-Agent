@@ -5,6 +5,7 @@ import { ChatHeader } from "./components/chat/ChatHeader";
 import { Landing } from "./components/chat/Landing";
 import { MessageList } from "./components/chat/MessageList";
 import { ChatForm } from "./components/input/ChatForm";
+import { DevicesPanel } from "./components/devices/DevicesPanel";
 import { DocumentsPanel } from "./components/documents/DocumentsPanel";
 import { Sidebar } from "./components/nav/Sidebar";
 import { useAuth } from "./hooks/useAuth";
@@ -26,6 +27,7 @@ function ChatApp({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const wide = useMediaQuery("(min-width: 768px)");
   const [sidebarOpen, setSidebarOpen] = useState(wide);
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [devicesOpen, setDevicesOpen] = useState(false);
   const [activeId, setActiveId] = useState<string>();
   const model = useModel();
   const voice = useVoiceStatus();
@@ -72,6 +74,7 @@ function ChatApp({ user, onSignOut }: { user: User; onSignOut: () => void }) {
         onSelect={select}
         onDelete={deleteConversation}
         onOpenDocuments={() => setDocumentsOpen(true)}
+        onOpenDevices={() => setDevicesOpen(true)}
         user={user}
         onSignOut={onSignOut}
       />
@@ -118,6 +121,7 @@ function ChatApp({ user, onSignOut }: { user: User; onSignOut: () => void }) {
         </p>
       </main>
       {documentsOpen && <DocumentsPanel onClose={() => setDocumentsOpen(false)} />}
+      {devicesOpen && <DevicesPanel onClose={() => setDevicesOpen(false)} />}
     </div>
   );
 }

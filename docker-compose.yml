@@ -26,6 +26,7 @@ services:
       OPENCODE_URL: http://harness:4097
       LLM_GATEWAY_URL: http://litellm:4000
       LITELLM_KEY_API: ${LITELLM_KEY_API}
+      LITELLM_ADMIN_KEY: ${LITELLM_MASTER_KEY} # creates/revokes per-device gateway keys
       SEYL_DB_HOST: db
       SEYL_DB_PASSWORD: ${SEYL_DB_PASSWORD}
       SEYL_MCP_TOKEN: ${SEYL_MCP_TOKEN}

@@ -63,6 +63,13 @@ export type DocumentInfo = {
   createdAt: string;
 };
 
+// "Connect a device" (server/devices.ts): an app such as the OpenCode CLI or OpenWork desktop,
+// connected to Seyl with its own model key and document-tools token.
+export type DeviceInfo = { id: string; name: string; createdAt: string; lastUsedAt?: string; expiresAt: string };
+
+// Returned ONCE, when a device is connected: the two secrets are never shown again.
+export type NewDevice = { device: DeviceInfo; apiKey: string; mcpToken: string; gatewayUrl: string; mcpUrl: string; models: string[] };
+
 // Which voice services are reachable (speech-to-text, text-to-speech).
 export type VoiceStatus = { asr: boolean; tts: boolean };
 

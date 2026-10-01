@@ -299,6 +299,27 @@ Lessons learned:
   *who is asking* through the agent into its tools (MCP) — and a separate workspace per user. That's part of the
   multi-user/AWS phase.
 
+## Connect a device
+
+Other apps can use Seyl too — the plain OpenCode CLI, OpenWork desktop — without changing their code (the
+company's "option D": one Seyl platform under unmodified foundations). They can't sign in to Keycloak themselves,
+so a signed-in user connects them from **Devices** in the sidebar and gets two secrets, shown once:
+
+| Secret | Used at | What it may do |
+|---|---|---|
+| Model key (`SEYL_API_KEY`) — a LiteLLM virtual key | `http://localhost:8080/llm/v1` | Only the chat models, 30 requests/min, expires after 90 days, billed to that user |
+| Document-tools token (`SEYL_MCP_TOKEN`) | `http://localhost:8080/mcp` | Seyl's document search/list/read (MCP) |
+
+The panel also writes an `opencode.json` for the device that reads both from environment variables (no
+secrets in the file). Seyl stores only hashes; **Disconnect** revokes the key and the token at once.
+
+- The harness's own MCP token stays on its private port: it is refused at the public `/mcp`.
+- Creating keys needs the gateway's admin key, so only the api holds it (`LITELLM_ADMIN_KEY`). A dedicated
+  key-issuing service with a narrower role is the cleaner design for later.
+- `npm run devices:test` checks 17 things with two temporary users: what the key and token may and may not do,
+  that another user can't see or revoke the device, the anti-CSRF guard, and that revoking works instantly.
+- Still shared: the document library (per-user libraries come with tenancy).
+
 ## Approvals
 
 seyl-ai can create and change files in the workspace — but every change waits for you:
@@ -553,6 +574,7 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `SEYL_MCP_URL` | `http://127.0.0.1:3001/mcp` | harness → the api's MCP tool server |
 | `HOST`, `PORT`, `MCP_PORT` | `127.0.0.1`, `3000`, `3001` | api: where it listens (containers set `HOST=0.0.0.0`) |
 | `KEYCLOAK_URL` | port-forward to `127.0.0.1:8081/auth` | scripts: Keycloak's admin API |
+| `LITELLM_ADMIN_KEY` | from `LITELLM_MASTER_KEY` | api: creates and revokes device keys |
 | `SEYL_MCP_TOKEN` | from `.env` | harness ↔ api: bearer token for `/mcp` |
 
 ## Project layout
@@ -578,6 +600,8 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `scripts/db-setup.ts` | Creates seyl-ai's database, user and the pgvector extension (`npm run db:setup`) |
 | `server/auth.ts`, `server/owners.ts` | Login (OIDC, BFF, sessions) and conversation ownership |
 | `server/csrf.ts` | Cross-site request protection for every state-changing API call |
+| `server/devices.ts`, `web/src/components/devices/DevicesPanel.tsx`, `web/src/lib/deviceConfig.ts` | Connect a device: per-user gateway keys + MCP tokens, the generated opencode.json |
+| `scripts/devices-test.ts` | Device security test (`npm run devices:test`) |
 | `keycloak/themes/seyl`, `deploy/keycloak.Dockerfile` | Keycloak login theme in the app's (LibreChat's) design, baked into `seyl-ai/keycloak` |
 | `scripts/lib/keycloak-admin.ts` | Reach Keycloak's admin API directly (starts a port-forward if needed) |
 | `web/src/components/input/AttachMenu.tsx`, `Attachments.tsx`, `web/src/hooks/useAttachments.ts` | 📎 menu (image / document), attachment chips, upload + indexing status |
@@ -610,6 +634,9 @@ Every request that changes something (POST, PUT, DELETE) must send `X-Seyl-Csrf:
 |---|---|
 | `GET /api/auth/login` → `/api/auth/callback` | Sign in (OIDC redirect flow) |
 | `GET /api/auth/me`, `POST /api/auth/logout` | Who's signed in; sign out (returns Keycloak's logout URL) |
+| `GET /api/devices`, `POST /api/devices` `{ name }`, `DELETE /api/devices/:id` | List, connect (returns the key and token once), disconnect |
+| `POST /mcp` (bearer = a device's MCP token) | Document tools for connected devices |
+| `/llm/v1/chat/completions`, `/llm/v1/models`, `/llm/v1/embeddings` (bearer = a device key) | The model gateway for devices |
 | `GET /api/model` | Which model is configured |
 | `GET /api/conversations` | List conversations |
 | `POST /api/conversations` | Create one |

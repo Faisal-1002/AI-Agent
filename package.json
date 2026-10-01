@@ -17,7 +17,8 @@
     "db:setup": "tsx scripts/db-setup.ts",
     "ask": "tsx scripts/ask.ts",
     "auth:setup": "tsx scripts/auth-setup.ts",
-    "auth:test": "tsx scripts/auth-test.ts"
+    "auth:test": "tsx scripts/auth-test.ts",
+    "devices:test": "tsx scripts/devices-test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",

@@ -1,4 +1,4 @@
-import { CSRF_HEADER, type ChatMessage, type Conversation, type DocumentInfo, type GuardFlags, type ModelInfo, type PermissionAsk, type PermissionReply, type PromptRequest, type User, type VoiceStatus } from "../../../shared/chat";
+import { CSRF_HEADER, type ChatMessage, type Conversation, type DocumentInfo, type GuardFlags, type ModelInfo, type PermissionAsk, type PermissionReply, type PromptRequest, type User, type VoiceStatus, type DeviceInfo, type NewDevice } from "../../../shared/chat";
 
 // Every call carries the anti-CSRF header (server/csrf.ts): another site can't add it.
 const withCsrf = (init: RequestInit = {}): RequestInit => ({ ...init, headers: { [CSRF_HEADER]: "1", ...init.headers } });
@@ -47,6 +47,11 @@ export const api = {
     return request<DocumentInfo>("/documents", { method: "POST", body: form });
   },
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
+
+  devices: () => request<DeviceInfo[]>("/devices"),
+  connectDevice: (name: string) =>
+    request<NewDevice>("/devices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }),
+  disconnectDevice: (id: string) => request<void>(`/devices/${id}`, { method: "DELETE" }),
 
   voiceStatus: () => request<VoiceStatus>("/voice/status"),
   // Fire and forget: start loading the speech-to-text model (the 🎤 was just pressed).

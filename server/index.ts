@@ -8,7 +8,8 @@ import { AUTH_ENABLED, authRoutes, requireUser } from "./auth.js";
 import { migrate } from "./db.js";
 import { addDocument, cleanName, deleteDocument, fileType, listDocuments, MAX_UPLOAD_BYTES, readyDocuments, SUPPORTED } from "./documents.js";
 import { reviewReply, screenPrompt } from "./guard.js";
-import { mcp } from "./mcp.js";
+import { deviceMcp, mcp } from "./mcp.js";
+import { devices } from "./devices.js";
 import { csrfGuard } from "./csrf.js";
 import { claimUnowned, ownedBy, ownerOf, recordOwner } from "./owners.js";
 import { AGENT, client, FAST_VARIANT, MODEL, MODEL_INFO } from "./opencode.js";
@@ -69,6 +70,12 @@ app.get("/api/model", (c) => {
   warmUp();
   return c.json<ModelInfo>(MODEL_INFO);
 });
+
+// Connected devices: gateway keys + MCP tokens for the OpenCode CLI, OpenWork… (server/devices.ts).
+app.route("/api/devices", devices);
+// Their entrance to the document tools — outside /api: no session cookie, the device's own
+// token instead (server/mcp.ts). nginx forwards only this exact path.
+app.route("/mcp", deviceMcp);
 
 // Speech-to-text and text-to-speech (server/voice.ts).
 app.route("/api/voice", voice);

@@ -66,5 +66,21 @@ export async function migrate() {
         created_at      timestamptz NOT NULL DEFAULT now()
       )`;
     await tx`CREATE INDEX IF NOT EXISTS conversation_owners_owner_idx ON conversation_owners (owner)`;
+
+    // Connected devices (server/devices.ts). Only hashes of what was handed out: the gateway's
+    // own hashed key id (enough to revoke the key) and the SHA-256 of the MCP token.
+    await tx`
+      CREATE TABLE IF NOT EXISTS devices (
+        id               uuid PRIMARY KEY,
+        owner            text NOT NULL,
+        name             text NOT NULL,
+        gateway_key_hash text NOT NULL,
+        mcp_token_hash   text NOT NULL UNIQUE,
+        created_at       timestamptz NOT NULL DEFAULT now(),
+        last_used_at     timestamptz,
+        expires_at       timestamptz NOT NULL,
+        revoked_at       timestamptz
+      )`;
+    await tx`CREATE INDEX IF NOT EXISTS devices_owner_idx ON devices (owner)`;
   });
 }

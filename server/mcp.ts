@@ -3,6 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
+import { deviceOwner } from "./devices.js";
 import { listDocuments, readDocument, searchDocuments } from "./documents.js";
 
 // seyl-ai's MCP server: document tools for the agent.
@@ -12,10 +13,14 @@ import { listDocuments, readDocument, searchDocuments } from "./documents.js";
 // tools to the model as docs_search_documents, docs_list_documents, docs_read_document.
 // Any other MCP client (Claude, Cursor, …) could use them the same way.
 //
-// Served on its own port (MCP_PORT, 3001) that nginx doesn't forward, so it isn't reachable
-// from browsers or through the app's address at all; only the harness calls it, and it must
-// send the shared token (SEYL_MCP_TOKEN). The MCP spec's optional OAuth 2.1 flow is meant for
-// third-party clients; one internal caller with a strong shared secret doesn't need it.
+// Two entrances to the same tools, which differ only in who may come in:
+//  - `mcp`: the harness, with the shared SEYL_MCP_TOKEN, on its own port (MCP_PORT, 3001) that
+//    nginx never forwards — a leaked harness token is useless from outside;
+//  - `deviceMcp`: connected devices (server/devices.ts) through nginx at /mcp, each with its own
+//    revocable token. The harness token does NOT work there.
+// The document library is still shared by all users (per-user libraries come with tenancy).
+// The MCP spec's optional OAuth 2.1 flow is meant for third-party clients we don't know; our
+// devices get their tokens from a signed-in user on the "Connect a device" page instead.
 
 const TOKEN = process.env.SEYL_MCP_TOKEN;
 if (TOKEN !== undefined && TOKEN.length < 32) throw new Error("SEYL_MCP_TOKEN must be at least 32 characters");
@@ -84,14 +89,25 @@ function createServer(): McpServer {
   return server;
 }
 
-export const mcp = new Hono();
+function endpoint(allowed: (authorization: string | undefined) => Promise<boolean>) {
+  const app = new Hono();
+  // Stateless: every request gets a fresh server + transport (nothing to share between api pods).
+  app.all("/", async (c) => {
+    // Browsers always send Origin; MCP clients (the harness, OpenCode, OpenWork's engine) don't.
+    // (MCP spec: validate Origin → 403.)
+    if (c.req.header("origin")) return c.json({ error: "Forbidden" }, 403);
+    if (!(await allowed(c.req.header("authorization")))) return c.json({ error: "Unauthorized" }, 401);
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    await createServer().connect(transport);
+    return transport.handleRequest(c.req.raw);
+  });
+  return app;
+}
 
-// Stateless: every request gets a fresh server + transport (nothing to share between api pods).
-mcp.all("/", async (c) => {
-  // Browsers always send Origin; the harness never does. (MCP spec: validate Origin → 403.)
-  if (c.req.header("origin")) return c.json({ error: "Forbidden" }, 403);
-  if (!tokenOk(c.req.header("authorization"))) return c.json({ error: "Unauthorized" }, 401);
-  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-  await createServer().connect(transport);
-  return transport.handleRequest(c.req.raw);
+export const mcp = endpoint(async (authorization) => tokenOk(authorization));
+
+const DEVICE_TOKEN = /^Bearer (seyl_mcp_[A-Za-z0-9_-]{43})$/;
+export const deviceMcp = endpoint(async (authorization) => {
+  const token = DEVICE_TOKEN.exec(authorization ?? "")?.[1];
+  return token !== undefined && (await deviceOwner(token)) !== undefined;
 });

@@ -25,6 +25,9 @@ spec:
             - name: LITELLM_KEY_API # this pod's own key: guard, voice and embedding models only
               valueFrom:
                 secretKeyRef: { name: seyl-secrets, key: LITELLM_KEY_API }
+            - name: LITELLM_ADMIN_KEY # creates/revokes per-device gateway keys (server/devices.ts)
+              valueFrom:
+                secretKeyRef: { name: seyl-secrets, key: LITELLM_MASTER_KEY }
             - name: SEYL_DB_HOST # seyl-ai's own database (documents + vectors)
               value: db
             - name: SEYL_DB_PASSWORD
