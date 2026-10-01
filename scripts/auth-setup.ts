@@ -6,8 +6,8 @@
 //   - realm "seyl"            — seyl-ai's own space for users (separate from Keycloak's "master")
 //   - client "seyl-web"       — the api, as a CONFIDENTIAL client (it has a secret: OIDC_CLIENT_SECRET)
 //                               using the Authorization Code flow with PKCE (S256) only
-//   - an OAuth 2.1 baseline   — a client policy for EVERY client in the realm: PKCE (S256),
-//                               no implicit flow, no password grant
+//   - a security baseline     — a client policy for EVERY client in the realm: PKCE (S256),
+//                               no implicit flow, no password grant (OAuth 2.0 best practice, RFC 9700)
 //   - user "faisal"           — a local test account (password: SEYL_USER_PASSWORD in .env)
 //   - master realm            — brute-force protection for the admin account
 
@@ -56,7 +56,7 @@ const realm = {
   bruteForceProtected: true, // lock out password guessing
   accessTokenLifespan: 300,
   ssoSessionIdleTimeout: 8 * 3600,
-  // Refresh tokens are single-use (OAuth 2.1 rule for public clients such as the account
+  // Refresh tokens are single-use (best practice for public clients such as the account
   // console). seyl-web doesn't keep refresh tokens at all.
   revokeRefreshToken: true,
   refreshTokenMaxReuse: 0,
@@ -82,8 +82,8 @@ const client = {
   publicClient: false, // confidential: the api keeps a secret; browsers never see tokens
   secret: required("OIDC_CLIENT_SECRET"),
   standardFlowEnabled: true, // Authorization Code flow…
-  implicitFlowEnabled: false, // …and not the old, insecure implicit flow (OAuth 2.1 removes it)
-  directAccessGrantsEnabled: false, // no password grant for the app (OAuth 2.1 removes it too)
+  implicitFlowEnabled: false, // …and not the old, insecure implicit flow (RFC 9700: don't use it)
+  directAccessGrantsEnabled: false, // no password grant for the app (RFC 9700: must not be used)
   serviceAccountsEnabled: false,
   redirectUris: [`${PUBLIC_URL}/api/auth/callback`],
   webOrigins: [PUBLIC_URL],
@@ -97,7 +97,7 @@ if (existingClient) await admin("PUT", `/${REALM}/clients/${existingClient.id}`,
 else await admin("POST", `/${REALM}/clients`, client);
 console.log(`✓ client seyl-web ${existingClient ? "updated" : "created"} (confidential, code flow + PKCE S256)`);
 
-// ── OAuth 2.1 baseline for every client in the realm ──
+// ── Security baseline for every client in the realm (OAuth 2.0 + RFC 9700) ──
 // seyl-web is already configured this way; the policy makes it the rule for ALL clients —
 // including the ones Keycloak creates itself (e.g. "admin-cli" allows the password grant).
 // Not Keycloak's built-in "oauth-2-1-for-confidential-client" profile: that one also demands
@@ -105,7 +105,7 @@ console.log(`✓ client seyl-web ${existingClient ? "updated" : "created"} (conf
 await admin("PUT", `/${REALM}/client-policies/profiles`, {
   profiles: [
     {
-      name: "seyl-oauth-2-1-baseline",
+      name: "seyl-security-baseline",
       description: "PKCE with S256, no implicit flow, no password grant",
       executors: [
         { executor: "pkce-enforcer", configuration: { "auto-configure": "true" } },
@@ -118,11 +118,11 @@ await admin("PUT", `/${REALM}/client-policies/profiles`, {
 await admin("PUT", `/${REALM}/client-policies/policies`, {
   policies: [
     {
-      name: "seyl-oauth-2-1-baseline",
-      description: "Applies the OAuth 2.1 baseline to every client",
+      name: "seyl-security-baseline",
+      description: "Applies the security baseline to every client",
       enabled: true,
       conditions: [{ condition: "any-client", configuration: {} }],
-      profiles: ["seyl-oauth-2-1-baseline"],
+      profiles: ["seyl-security-baseline"],
     },
   ],
 });

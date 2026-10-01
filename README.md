@@ -242,10 +242,10 @@ Sign in ──► /api/auth/login: PKCE verifier + state + nonce (encrypted, 10-
        ◄── HttpOnly cookie "seyl_session" (random id; only its SHA-256 is stored in Postgres)
 ```
 
-- **Backend for frontend (BFF)**: the api does the whole OAuth 2.1 flow (Authorization Code + PKCE). Tokens never
+- **Backend for frontend (BFF)**: the api does the whole OAuth 2.0 / OpenID Connect flow (Authorization Code + PKCE). Tokens never
   reach the browser — `document.cookie` is empty, so a malicious script has nothing to steal.
-- **Keycloak client**: confidential, code flow + PKCE S256 only; implicit flow and password grant off (both removed
-  in OAuth 2.1). Self-registration off; brute-force protection on (also for the admin realm).
+- **Keycloak client**: confidential, code flow + PKCE S256 only; implicit flow and password grant off (OAuth 2.0's
+  security best practice, RFC 9700, rules both out). Self-registration off; brute-force protection on (also for the admin realm).
 - **Looks like the app**: the sign-in screen follows LibreChat's layout, and Keycloak's password page uses a custom
   theme with the same design (`keycloak/themes/seyl`, baked into `seyl-ai/keycloak` — `deploy/keycloak.Dockerfile`).
   Error messages are codes in the URL (`?login_error=expired`); the words come from the app, so a crafted link
@@ -261,20 +261,22 @@ Sign in ──► /api/auth/login: PKCE verifier + state + nonce (encrypted, 10-
   http://localhost:8081/auth/admin (user `admin`, password `KEYCLOAK_ADMIN_PASSWORD`). The admin scripts start
   that port-forward themselves (`scripts/lib/keycloak-admin.ts`).
 
-### OAuth 2.1
+### OAuth 2.0 and its security best practices
 
-OAuth 2.1 isn't a new protocol: it's OAuth 2.0 minus the risky parts (implicit flow, password grant, PKCE "plain",
-tokens in URLs) with the best practices made mandatory (PKCE, exact redirect URIs). Still an IETF draft
-(draft-ietf-oauth-v2-1-16, Sept 2026). An 8-agent audit (four auditors, each checked by a skeptic, with live tests)
-compared seyl-ai against it, the browser-app BFF draft and the security BCP (RFC 9700):
+**Decision (Oct 2026): Seyl uses OAuth 2.0 (RFC 6749) + OpenID Connect, following OAuth 2.0's Security Best Current
+Practice (RFC 9700) — not OAuth 2.1.** OAuth 2.1 is still an IETF draft; it's OAuth 2.0 with those same best
+practices made mandatory, plus extras (e.g. signed-JWT client authentication in Keycloak's 2.1 profile) that aren't
+worth the effort for Seyl. Everything below is plain OAuth 2.0. An 8-agent audit (four auditors, each checked by a
+skeptic, with live tests) compared seyl-ai against the OAuth 2.1 draft, the browser-app BFF draft and RFC 9700:
 
 | | |
 |---|---|
 | **Met** (tested live) | code flow + PKCE S256 (no-PKCE and "plain" rejected), no implicit / password grant, exact redirect URIs (6 variants rejected), state + nonce, issuer check incl. the `iss` parameter, tokens never in the browser |
-| **Fixed after the audit** | open redirect in `returnTo` (`/\evil.example` counted as a local path — now resolved like a browser and compared by origin); ID token signature now checked; wildcard logout redirect → exact; OAuth 2.1 rules as a Keycloak **client policy for every client** (PKCE S256, no implicit, no password grant — Keycloak's own `admin-cli` allowed the password grant); refresh tokens single-use |
+| **Fixed after the audit** | open redirect in `returnTo` (`/\evil.example` counted as a local path — now resolved like a browser and compared by origin); ID token signature now checked; wildcard logout redirect → exact; the best-practice rules as a Keycloak **client policy for every client** (PKCE S256, no implicit, no password grant — Keycloak's own `admin-cli` allowed the password grant); refresh tokens single-use |
 | **Also fixed** | `/mcp` reachable through nginx (see Documents); admin console + admin realm no longer published; nginx answers only for `localhost`/`127.0.0.1` (stops DNS rebinding — not a network boundary, see below); CSRF protection (`server/csrf.ts`: every change needs the `X-Seyl-Csrf` header, which other sites can't send); security headers (CSP, no framing); approvals bound to their conversation; the api refuses weak or missing secrets and a mistyped `AUTH_ENABLED` |
 | **Since then** | a password on the OpenCode harness (the api signs every call; without it, anything that reached the harness could drive the agent); "Allow for this chat" really per chat (see [Approvals](#approvals)); an append-only [audit log](#audit-log) |
-| **For AWS** | HTTPS everywhere (OAuth 2.1 requires it); network policies (only the api may reach the harness); per-user documents and workspaces; back-channel logout; `private_key_jwt` client auth |
+| **For AWS** | HTTPS everywhere (OAuth 2.0 requires TLS too — and so does any login on the internet); network policies (only the api may reach the harness); per-user documents and workspaces |
+| **Not planned** | back-channel logout, signed-JWT (`private_key_jwt`) client authentication, sender-constrained tokens — OAuth 2.1-profile extras, not needed with OAuth 2.0 |
 
 **Other devices on your network**: Compose publishes the app on `127.0.0.1` only. Docker Desktop's Kubernetes
 LoadBalancer, though, listens on every network interface, and Docker's own firewall rule allows inbound traffic —
