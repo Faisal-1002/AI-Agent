@@ -1,0 +1,11 @@
+# gitleaks (CI secret scan): all the default rules, plus the false positives we've checked.
+# Keep every exception as narrow as possible — one rule, one exact pattern — and say why.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "The api's internal URL for the agent's document tools (host 'api', port 3001) — an address, not a key"
+targetRules = ["generic-api-key"]
+regexTarget = "line"
+regexes = ['''api ?:3001/internal/docs''']

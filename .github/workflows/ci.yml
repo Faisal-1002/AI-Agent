@@ -48,9 +48,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, persist-credentials: false }
       # The gitleaks CLI in its official image (MIT). The gitleaks GitHub Action needs a paid
-      # license for organisation repos; the CLI doesn't.
+      # license for organisation repos; the CLI doesn't. Checked false positives: .gitleaks.toml.
       - name: gitleaks
-        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --redact --no-banner --verbose
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --config /repo/.gitleaks.toml --redact --no-banner --verbose
 
   images:
     name: Docker images
