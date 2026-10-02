@@ -127,6 +127,14 @@ export async function migrate() {
       SELECT 1, CASE WHEN count(DISTINCT owner) = 1 THEN min(owner) END, count(DISTINCT owner)
       FROM conversation_owners WHERE space_id IS NULL
       ON CONFLICT (id) DO NOTHING`;
+
+    // When the api last used each harness folder, and when it last closed it (server/idle.ts).
+    await tx`
+      CREATE TABLE IF NOT EXISTS harness_folders (
+        directory    text PRIMARY KEY,
+        last_used_at timestamptz NOT NULL DEFAULT now(),
+        closed_at    timestamptz
+      )`;
   });
 
   // The audit log is NOT created here: the api's own user may only add and read rows, so it

@@ -407,9 +407,17 @@ startup (`server/policy.ts`, against the rules OpenCode actually enforces, not j
   development, and in the containers OpenCode tried to npm-install a package into its writable config folder at
   every start. Its config folder is now the repo's `harness-config/` (dev) or a root-owned copy in the image.
 
-Not yet: OpenCode keeps every folder's instance in memory until it restarts (an idle cleanup is the next step for many
-users), and one OpenCode process for everyone is a shared process — real separation between *companies* means a
-sandboxed harness per company (the platform plan).
+**Idle folders are closed.** OpenCode keeps one instance per folder in memory (config, tools, the model catalog, …)
+and never closes one by itself — the harness would grow with every user who ever opened a conversation. The api notes
+when it last used each folder (table `harness_folders`, `server/idle.ts`); every 5 minutes one api pod closes the
+folders nobody has used for 30 minutes (`SEYL_IDLE_MINUTES`). Never one whose agent is working or that waits for an
+approval; a chat that's open in a browser counts as in use. Nothing is lost — conversations live in OpenCode's
+database, and the next request opens the folder again. OpenCode has no list of open folders, and closing one opens it
+first, so only folders used since they were last closed are candidates. `npm run idle:test` checks it with a
+1-minute limit (put back afterwards).
+
+Not yet: one OpenCode process for everyone is a shared process — real separation between *companies* means a sandboxed
+harness per company (the platform plan).
 
 ## Approvals
 
@@ -690,6 +698,7 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `SEYL_WORKSPACE_SEED` | `./workspace` (containers: `/workspace-seed`) | starter files for a new space |
 | `SEYL_WORKSPACE` | `./workspace` (containers: `/workspace`) | the old shared folder from before spaces |
 | `SEYL_HARNESS_ADMIN_URL` / `SEYL_HARNESS_ADMIN_PORT` | `http://127.0.0.1:4098` / OpenCode's port + 1 | api → harness: creates the spaces' folders |
+| `SEYL_IDLE_MINUTES` / `SEYL_IDLE_CHECK_SECONDS` | `30` / `300` | api: close harness folders unused this long (0 = never), checked this often |
 | `XDG_CONFIG_HOME` | `./harness-config` (containers: `/opt/seyl/config`, root-owned) | harness: OpenCode's config folder — our custom tools |
 | `TTS_VOICE` | `Aiden` | api: voice used for read-aloud |
 | `TORCH_THREADS` | `8` (asr) / `4` (tts) | voice services: CPU threads |
@@ -728,7 +737,7 @@ On every push to `main` and every pull request, GitHub runs `.github/workflows/c
 
 `npm run license:check` reads every npm package's license from `package-lock.json` and fails on anything that
 isn't permissive (MIT, Apache-2.0, BSD, ISC, …); MPL-2.0 is accepted only for build tools that never ship.
-The integration tests (`auth:test`, `devices:test`, `approvals:test`, `tenancy:test`, `guard:eval`) need the running stack, so they
+The integration tests (`auth:test`, `devices:test`, `approvals:test`, `tenancy:test`, `idle:test`, `guard:eval`) need the running stack, so they
 stay local. `npm run approvals:test` has a temporary user approve one edit "for this chat", then checks that the
 next edit in that chat goes through with no browser open, that another chat is asked again, what the audit log
 recorded, that the log can't be changed, and that the harness refuses requests without its password.
@@ -755,6 +764,7 @@ recorded, that the log can't be changed, and that the harness refuses requests w
 | `server/mcp.ts` | MCP server for connected devices (search / list / read the owner's documents) |
 | `server/tools.ts`, `harness-config/opencode/tools/docs.js` | The agent's document tools: the custom tools in the harness, and the api endpoint they call |
 | `server/spaces.ts`, `server/paths.ts` | Spaces (each user's folder + library) and where the folders live |
+| `server/idle.ts` | Closes harness folders nobody has used for a while |
 | `server/policy.ts` | The agent's safety rules as decisions, checked against what OpenCode enforces (harness startup + unit tests) |
 | `scripts/db-setup.ts` | Creates seyl-ai's database, user, the pgvector extension and the audit log (`npm run db:setup`) |
 | `server/auth.ts`, `server/owners.ts` | Login (OIDC, BFF, sessions) and conversation ownership |
@@ -769,6 +779,7 @@ recorded, that the log can't be changed, and that the harness refuses requests w
 | `scripts/devices-test.ts` | Device security test (`npm run devices:test`) |
 | `scripts/approvals-test.ts` | Approvals + audit log test, live (`npm run approvals:test`) |
 | `scripts/tenancy-test.ts`, `scripts/lib/live.ts` | Per-user isolation test, live (`npm run tenancy:test`); helpers + cleanup for the live tests |
+| `scripts/idle-test.ts` | Idle-folder test, live (`npm run idle:test`) |
 | `keycloak/themes/seyl`, `deploy/keycloak.Dockerfile` | Keycloak login theme in the app's (LibreChat's) design, baked into `seyl-ai/keycloak` |
 | `scripts/lib/keycloak-admin.ts` | Reach Keycloak's admin API directly (starts a port-forward if needed) |
 | `web/src/components/input/AttachMenu.tsx`, `Attachments.tsx`, `web/src/hooks/useAttachments.ts` | 📎 menu (image / document), attachment chips, upload + indexing status |

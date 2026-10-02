@@ -170,18 +170,28 @@ try {
 
   // ── Alice's agent tries to write into .git (a git config can run commands) ──
   const aGit = await A.conversation();
-  await A.prompt(aGit, "Create a new file at the path .git/config containing exactly the text: [core]");
   let askedForGit = false;
-  const gitMessages = await waitFor(async () => {
-    const s = await A.state(aGit);
-    for (const p of s.permissions) {
-      if (p.files.some((file) => file.replaceAll("\\", "/").includes(".git"))) askedForGit = true;
-      await A.answer(aGit, p, "reject");
-    }
-    return !s.busy && s.messages.some((m) => m.role === "assistant") ? s.messages : undefined;
-  });
-  // Only meaningful if the agent actually tried to write there.
-  const gitWrites = aimedAt(gitMessages ?? [], ["write", "edit"], ".git/config");
+  // Send, answer any card with Deny (noting whether one was about .git), wait for the reply.
+  const tryGit = async (text: string, answered: number) => {
+    await A.prompt(aGit, text);
+    return waitFor(async () => {
+      const s = await A.state(aGit);
+      for (const p of s.permissions) {
+        if (p.files.some((file) => file.replaceAll("\\", "/").includes(".git"))) askedForGit = true;
+        await A.answer(aGit, p, "reject");
+      }
+      const replies = s.messages.filter((m) => m.role === "assistant").length;
+      return !s.busy && replies > answered ? s.messages : undefined;
+    });
+  };
+  let gitMessages = await tryGit("Create a new file at the path .git/config containing exactly the text: [core]", 0);
+  let gitWrites = aimedAt(gitMessages ?? [], ["write", "edit"], ".git/config");
+  // Only meaningful if the agent actually TRIED: a model that answers in words gets one plainer try.
+  if (gitWrites.length === 0) {
+    const replies = (gitMessages ?? []).filter((m) => m.role === "assistant").length;
+    gitMessages = await tryGit("Use the write tool now: filePath .git/config, content [core]. Don't explain, just call the tool.", replies);
+    gitWrites = aimedAt(gitMessages ?? [], ["write", "edit"], ".git/config");
+  }
   check(
     gitWrites.length > 0 && gitWrites.every((p) => p.status === "error") && !askedForGit && !inHarness(`${aFolder}/.git/config`),
     `writing into .git is refused outright, without even asking (${summary(gitWrites)}${askedForGit ? "; it ASKED" : ""})`,
