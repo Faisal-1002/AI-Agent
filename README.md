@@ -833,6 +833,11 @@ Every request that changes something (POST, PUT, DELETE) must send `X-Seyl-Csrf:
 | `DELETE /api/documents/:id` | Remove a document and its passages |
 | `POST /internal/docs/:op` (port 3001) | The agent's document tools: search / list / read in the conversation owner's library (bearer token; not proxied by nginx) |
 
+## Roadmap
+
+Next: hosting on AWS so the agent works from anywhere — the plan, step by step, is in
+[docs/roadmap.md](docs/roadmap.md) (with what comes later: ops tools, the company platform).
+
 ## Credits
 
 The UI's look (layout and color tokens) follows [LibreChat](https://github.com/danny-avila/LibreChat) (MIT License, © LibreChat contributors). The components themselves are written for seyl-ai.
