@@ -1,15 +1,17 @@
-# Seyl CI: every push to main and every pull request runs these checks on GitHub's machines.
-# Nothing here needs the running stack (no models, no Keycloak, no cluster) — the integration
-# tests (auth:test, devices:test, guard:eval) still run locally against the live stack.
+# Seyl CI: every push to the main branch and every pull request runs these checks on GitHub's
+# machines. Nothing here needs the running stack (no models, no Keycloak, no cluster) — the
+# integration tests (auth:test, devices:test, approvals:test, tenancy:test, guard:eval) still run
+# locally against the live stack.
 #
-# Pushes to other branches don't run it (e.g. the copy in seyl-ai/openwork), so CI minutes are
-# only spent on what is about to land.
+# The main branch is seyl/main in the company repo (seyl-ai/seyl-ai-experiment), main elsewhere.
+# Pushes to other branches don't run it, so CI minutes are only spent on what is about to land.
+# (Organization Actions must be enabled for it to run in the company repo.)
 
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, seyl/main]
   pull_request:
   workflow_dispatch:
 
