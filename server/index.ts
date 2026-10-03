@@ -20,6 +20,7 @@ import { LEGACY_WORKSPACE, UUID } from "./paths.js";
 import { personalSpace } from "./spaces.js";
 import { AGENT, client, FAST_VARIANT, MODEL, MODEL_INFO } from "./opencode.js";
 import { markUsed, warmUp } from "./warmup.js";
+import { inUse, KEEP_OPEN_MS, startIdleCleanup } from "./idle.js";
 import { shouldThink } from "./think.js";
 import { guardFlags, sessionOf, toChatEvent, toChatMessage, toConversation, toPermissionAsk } from "./translate.js";
 import { voice } from "./voice.js";
@@ -117,7 +118,8 @@ const ownConversation = createMiddleware<{ Variables: { user: User; conversation
 });
 // The folder OpenCode runs a conversation in: its space's — or, for one from before spaces,
 // the old shared folder (still readable; the agent no longer works there).
-const folderOf = (conversation: ConversationRecord) => conversation.directory ?? LEGACY_WORKSPACE;
+// Calling it marks the folder as in use (server/idle.ts closes folders nobody uses).
+const folderOf = (conversation: ConversationRecord) => inUse(conversation.directory ?? LEGACY_WORKSPACE);
 app.use("/api/conversations/:id", ownConversation);
 app.use("/api/conversations/:id/*", ownConversation);
 
@@ -126,7 +128,7 @@ app.get("/api/conversations", async (c) => {
   // OpenCode lists sessions per folder: the user's space, plus the old shared folder if they own
   // conversations from before spaces. Ownership is still checked for each one.
   const folders = [(await personalSpace(sub)).dir, ...((await ownsLegacy(sub)) ? [LEGACY_WORKSPACE] : [])];
-  const lists = await Promise.all(folders.map((directory) => client.session.list({ directory, roots: true, limit: 200 }).then(unwrap)));
+  const lists = await Promise.all(folders.map((directory) => client.session.list({ directory: inUse(directory), roots: true, limit: 200 }).then(unwrap)));
   const sessions = lists.flat();
   const mine = AUTH_ENABLED ? await ownedBy(sub) : undefined;
   const conversations = sessions
@@ -139,7 +141,7 @@ app.get("/api/conversations", async (c) => {
 app.post("/api/conversations", async (c) => {
   const { sub } = c.get("user");
   const space = await personalSpace(sub);
-  const session = unwrap(await client.session.create({ directory: space.dir }));
+  const session = unwrap(await client.session.create({ directory: inUse(space.dir) }));
   await recordOwner(session.id, sub, space);
   return c.json(toConversation(session));
 });
@@ -183,6 +185,7 @@ const MAX_IMAGE_CHARS = 6 * 1024 * 1024; // data URL length (~4.5 MB of image)
 app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 }), async (c) => {
   const sessionID = c.req.param("id");
   const { spaceId, directory } = c.get("conversation");
+  if (directory) inUse(directory);
   // From before spaces: its agent would work in the old shared folder, which may hold everyone's
   // files. Readable, but closed for new messages.
   if (!spaceId || !directory) {
@@ -273,7 +276,7 @@ async function reviewWhenDone(sessionID: string, directory: string, prompt: stri
     const deadline = Date.now() + 15 * 60_000;
     while (Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      const status = unwrap(await client.session.status({ directory }));
+      const status = unwrap(await client.session.status({ directory: inUse(directory) }));
       if (status[sessionID] && status[sessionID].type !== "idle") continue;
 
       const messages = unwrap(await client.session.messages({ sessionID }));
@@ -359,6 +362,9 @@ app.get("/api/conversations/:id/events", (c) => {
   return streamSSE(c, async (stream) => {
     const abort = new AbortController();
     stream.onAbort(() => abort.abort()); // browser closed the stream → stop listening to OpenCode
+    // A chat that's open in a browser is in use, even when nobody types: keep its folder open.
+    const keepOpen = setInterval(() => inUse(directory), KEEP_OPEN_MS);
+    abort.signal.addEventListener("abort", () => clearInterval(keepOpen));
 
     // OpenCode's event stream for this conversation's folder (it carries only that folder's events).
     const events = await client.event.subscribe({ directory }, { signal: abort.signal });
@@ -373,6 +379,8 @@ app.get("/api/conversations/:id/events", (c) => {
       }
     } catch (err) {
       if (!abort.signal.aborted) throw err;
+    } finally {
+      clearInterval(keepOpen);
     }
   });
 });
@@ -392,6 +400,7 @@ async function migrateWithRetry() {
 }
 void migrateWithRetry();
 void watchApprovals(); // "Allow for this chat" answers even when the chat isn't open (server/approvals.ts)
+startIdleCleanup(); // close folders nobody has used for a while (server/idle.ts)
 
 const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
   console.log(`seyl-ai backend running at http://${HOST}:${PORT}`);

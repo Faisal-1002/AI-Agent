@@ -16,6 +16,7 @@ import { AGENT, config } from "../server/opencode.js";
 import { displayPath, LEGACY_WORKSPACE, spaceDir, TOOL_OUTPUT_GLOB, WORKSPACES_ROOT } from "../server/paths.js";
 import { evaluate, rulesFrom, violations } from "../server/policy.js";
 import { decide, parseVerdict } from "../server/guard.js";
+import { toucher } from "../server/idle.js";
 import { safeReturnTo } from "../server/redirect.js";
 import { shouldThink } from "../server/think.js";
 import { CSRF_HEADER, type NewDevice } from "../shared/chat.js";
@@ -217,4 +218,21 @@ describe("the agent's document tools (harness-config/opencode/tools/docs.js)", a
       globalThis.fetch = realFetch;
     }
   });
+});
+
+describe("idle folders: 'in use' marks are throttled", () => {
+  it("writes at most once per interval per folder", () => {
+    let now = 0;
+    const writes: string[] = [];
+    const touch = toucher(async (dir) => void writes.push(dir), () => now, 60_000);
+    touch("/a");
+    touch("/a");
+    touch("/b");
+    now = 59_999;
+    touch("/a");
+    now = 60_000;
+    touch("/a");
+    assert.deepEqual(writes, ["/a", "/b", "/a"]);
+  });
+  it("returns the folder, so it can wrap a call's directory", () => assert.equal(toucher(async () => {}, () => 0)("/x"), "/x"));
 });

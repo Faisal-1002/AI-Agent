@@ -1,6 +1,7 @@
 import type { PermissionRequest } from "@opencode-ai/sdk/v2";
 import { audit } from "./audit.js";
 import { sql } from "./db.js";
+import { openFolders } from "./idle.js";
 import { client } from "./opencode.js";
 import { conversationOf } from "./owners.js";
 
@@ -55,15 +56,21 @@ export async function autoApprove(request: PermissionRequest, directory: string)
 }
 
 // Answer whatever is waiting and already allowed — after "Allow for this chat" when the agent
-// asked for several things at once (one conversation), or after a reconnect (every conversation
-// that has rules: only those folders, so idle users' folders aren't woken up).
+// asked for several things at once (one conversation), or after a reconnect (conversations that
+// have rules, in folders that are open: a closed folder has nothing waiting, and asking would
+// open it again).
 export async function approvePending(sessionID?: string): Promise<void> {
-  const folders = sessionID
-    ? [(await conversationOf(sessionID))?.directory].filter((d): d is string => !!d)
-    : (await sql<{ directory: string }[]>`
-        SELECT DISTINCT o.directory FROM approval_rules r
-        JOIN conversation_owners o ON o.conversation_id = r.session_id
-        WHERE o.directory IS NOT NULL`).map((r) => r.directory);
+  let folders: string[];
+  if (sessionID) {
+    folders = [(await conversationOf(sessionID))?.directory].filter((d): d is string => !!d);
+  } else {
+    const open = new Set(await openFolders());
+    const withRules = await sql<{ directory: string }[]>`
+      SELECT DISTINCT o.directory FROM approval_rules r
+      JOIN conversation_owners o ON o.conversation_id = r.session_id
+      WHERE o.directory IS NOT NULL`;
+    folders = withRules.map((r) => r.directory).filter((d) => open.has(d));
+  }
   for (const directory of folders) {
     const pending = (await client.permission.list({ directory })).data ?? [];
     for (const request of pending) if (!sessionID || request.sessionID === sessionID) await autoApprove(request, directory);

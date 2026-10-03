@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { Hono } from "hono";
 import { listDocuments, readDocument, searchDocuments } from "./documents.js";
+import { inUse } from "./idle.js";
 import { conversationOf } from "./owners.js";
 
 // The document tools, as text for the model — and the internal endpoint the agent's tools call.
@@ -60,6 +61,7 @@ tools.post("/internal/docs/:op", async (c) => {
     return c.json({ error: "This conversation has no document library (start a new conversation)." }, 403);
   }
   const space = conversation.spaceId;
+  inUse(conversation.directory);
   // OpenCode doesn't validate custom tools' arguments: check them here.
   const args = (typeof body.args === "object" && body.args !== null ? body.args : {}) as Record<string, unknown>;
 
