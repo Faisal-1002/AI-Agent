@@ -27,7 +27,7 @@ export function toChatPart(part: Part): ChatPart | undefined {
     case "text":
       if (!part.synthetic) return { id: part.id, kind: "text", text: part.text };
       // Hidden notes aren't shown — except "attached documents", shown as file chips.
-      return attachedDocuments(part.metadata?.seylDocuments, part.id);
+      return attachedDocuments(part.metadata?.aiAgentDocuments, part.id);
     case "reasoning":
       return { id: part.id, kind: "reasoning", text: part.text, done: part.time.end !== undefined };
     case "file":

@@ -64,7 +64,7 @@ for (const c of REPLIES) {
   const ok = flagged === c.expect;
   if (ok) passed++;
   // The 0.6B model sometimes omits its optional "Refusal:" line; report it, don't fail on it
-  // (refusal is informational in seyl-ai, never used to enforce anything).
+  // (refusal is informational in Ai-Agent, never used to enforce anything).
   let refusalNote = "";
   if (v.refusal === undefined) (refusalMissing++, (refusalNote = "   (no refusal line)"));
   else if (v.refusal !== c.refusal) refusalNote = `   (refusal: expected ${c.refusal ? "yes" : "no"})`;

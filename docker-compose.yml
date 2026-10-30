@@ -4,16 +4,18 @@
 # Ollama stays on your PC (it needs the GPU); the gateway reaches it via host.docker.internal.
 # Just the model side (for `npm run dev`):   docker compose up -d litellm
 
+name: ai-agent # the project name (containers, volumes), whatever the folder is called
+
 services:
   harness:
     build: { context: ., dockerfile: deploy/app.Dockerfile }
-    image: seyl-ai/app:dev
+    image: ai-agent/app:dev
     command: ["node", "--import", "tsx", "server/harness.ts"]
     environment:
       LLM_GATEWAY_URL: http://litellm:4000
       LITELLM_KEY_HARNESS: ${LITELLM_KEY_HARNESS}
-      SEYL_DOCS_URL: http://api:3001/internal/docs # the agent's document tools call the api here (not published)
-      SEYL_MCP_TOKEN: ${SEYL_MCP_TOKEN}
+      AI_AGENT_DOCS_URL: http://api:3001/internal/docs # the agent's document tools call the api here (not published)
+      AI_AGENT_MCP_TOKEN: ${AI_AGENT_MCP_TOKEN}
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD}
     volumes:
       - opencode-data:/data # sessions survive restarts
@@ -22,22 +24,22 @@ services:
     # Not published to the PC: only other containers can talk to the harness.
 
   api:
-    image: seyl-ai/app:dev
+    image: ai-agent/app:dev
     environment:
       OPENCODE_URL: http://harness:4097
-      SEYL_HARNESS_ADMIN_URL: http://harness:4098 # the harness creates the spaces' folders
+      AI_AGENT_HARNESS_ADMIN_URL: http://harness:4098 # the harness creates the spaces' folders
       LLM_GATEWAY_URL: http://litellm:4000
       LITELLM_KEY_API: ${LITELLM_KEY_API}
       LITELLM_ADMIN_KEY: ${LITELLM_MASTER_KEY} # creates/revokes per-device gateway keys
-      SEYL_DB_HOST: db
-      SEYL_DB_PASSWORD: ${SEYL_DB_PASSWORD}
-      SEYL_MCP_TOKEN: ${SEYL_MCP_TOKEN}
+      AI_AGENT_DB_HOST: db
+      AI_AGENT_DB_PASSWORD: ${AI_AGENT_DB_PASSWORD}
+      AI_AGENT_MCP_TOKEN: ${AI_AGENT_MCP_TOKEN}
       OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD}
       AUTH_ENABLED: "true"
-      SEYL_PUBLIC_URL: http://localhost:8080
-      OIDC_INTERNAL_ISSUER: http://keycloak:8080/auth/realms/seyl
+      AI_AGENT_PUBLIC_URL: http://localhost:8080
+      OIDC_INTERNAL_ISSUER: http://keycloak:8080/auth/realms/ai-agent
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
-      SEYL_SESSION_SECRET: ${SEYL_SESSION_SECRET}
+      AI_AGENT_SESSION_SECRET: ${AI_AGENT_SESSION_SECRET}
     depends_on: [harness]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
@@ -47,7 +49,7 @@ services:
 
   web:
     build: { context: ., dockerfile: deploy/web.Dockerfile }
-    image: seyl-ai/web:dev
+    image: ai-agent/web:dev
     ports: ["127.0.0.1:8080:80"] # this PC only — not other devices on the network
     depends_on: [api, keycloak] # nginx proxies /api and /auth to them
 
@@ -56,8 +58,8 @@ services:
   # LiteLLM gateway: the only way to reach a model. Admin UI: http://localhost:4000/ui
   # (user "admin", password = LITELLM_MASTER_KEY). Published on localhost only.
   litellm:
-    build: { context: ., dockerfile: gateway/Dockerfile } # LiteLLM + gateway/config.yaml + the Seyl guard
-    image: seyl-ai/gateway:dev
+    build: { context: ., dockerfile: gateway/Dockerfile } # LiteLLM + gateway/config.yaml + the Ai-Agent guard
+    image: ai-agent/gateway:dev
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY}
@@ -73,8 +75,8 @@ services:
   # Keycloak: login page, users, OIDC tokens. Reached by browsers via nginx at /auth.
   # start-dev = plain HTTP and relaxed checks: fine on localhost, not for production.
   keycloak:
-    build: { context: ., dockerfile: deploy/keycloak.Dockerfile } # + seyl-ai's login theme
-    image: seyl-ai/keycloak:dev
+    build: { context: ., dockerfile: deploy/keycloak.Dockerfile } # + Ai-Agent's login theme
+    image: ai-agent/keycloak:dev
     command: ["start-dev"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -92,7 +94,7 @@ services:
     depends_on:
       db: { condition: service_healthy }
 
-  # Postgres (with pgvector): the gateway's keys and logs, and seyl-ai's documents + vectors
+  # Postgres (with pgvector): the gateway's keys and logs, and Ai-Agent's documents + vectors
   # (separate databases and users; npm run db:setup). Published on localhost for npm run dev.
   db:
     image: pgvector/pgvector:0.8.6-pg16-trixie # same Debian as the data was created on (collation!)
@@ -111,14 +113,14 @@ services:
   # Speech-to-text (Qwen3-ASR 0.6B, CPU). Only the gateway talks to it.
   asr:
     build: { context: voice, dockerfile: asr/Dockerfile } # context: voice/ for the shared lazy_model.py
-    image: seyl-ai/asr:dev
+    image: ai-agent/asr:dev
     volumes:
       - asr-models:/models # model weights, downloaded once
 
   # Text-to-speech (Qwen3-TTS 0.6B, CPU). Only the gateway talks to it.
   tts:
     build: { context: voice, dockerfile: tts/Dockerfile }
-    image: seyl-ai/tts:dev
+    image: ai-agent/tts:dev
     volumes:
       - tts-models:/models
 

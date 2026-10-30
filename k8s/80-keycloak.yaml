@@ -7,7 +7,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: keycloak
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   replicas: 1
   selector:
@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: keycloak
-          image: seyl-ai/keycloak:dev # Keycloak 26.7.5 + seyl-ai's login theme (deploy/keycloak.Dockerfile)
+          image: ai-agent/keycloak:dev # Keycloak 26.7.5 + Ai-Agent's login theme (deploy/keycloak.Dockerfile)
           imagePullPolicy: IfNotPresent
           # start-dev: plain HTTP and relaxed checks — fine on localhost, NOT for production
           # (production: `start` with TLS and a real hostname).
@@ -28,7 +28,7 @@ spec:
               value: admin
             - name: KC_BOOTSTRAP_ADMIN_PASSWORD
               valueFrom:
-                secretKeyRef: { name: seyl-secrets, key: KEYCLOAK_ADMIN_PASSWORD }
+                secretKeyRef: { name: ai-agent-secrets, key: KEYCLOAK_ADMIN_PASSWORD }
             - name: KC_DB
               value: postgres
             - name: KC_DB_URL
@@ -37,15 +37,15 @@ spec:
               value: keycloak
             - name: KC_DB_PASSWORD
               valueFrom:
-                secretKeyRef: { name: seyl-secrets, key: KEYCLOAK_DB_PASSWORD }
-            # The public address. Tokens say "issued by http://localhost:8080/auth/realms/seyl",
+                secretKeyRef: { name: ai-agent-secrets, key: KEYCLOAK_DB_PASSWORD }
+            # The public address. Tokens say "issued by http://localhost:8080/auth/realms/ai-agent",
             # no matter whether the browser or the api is talking to Keycloak.
             - name: KC_HOSTNAME
               value: http://localhost:8080/auth
             - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC # server-to-server calls may use keycloak:8080
               value: "true"
             # The admin console is NOT published through the app (deploy/nginx.conf). To use it:
-            #   kubectl -n seyl-ai port-forward svc/keycloak 8081:8080  → http://localhost:8081/auth/admin
+            #   kubectl -n ai-agent port-forward svc/keycloak 8081:8080  → http://localhost:8081/auth/admin
             - name: KC_HOSTNAME_ADMIN
               value: http://localhost:8081/auth
             - name: KC_HTTP_RELATIVE_PATH
@@ -75,7 +75,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: keycloak
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   selector: { app: keycloak }
   ports:

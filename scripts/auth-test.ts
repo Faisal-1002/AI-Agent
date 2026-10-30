@@ -13,7 +13,7 @@ try {
   process.loadEnvFile();
 } catch {}
 
-const APP = process.env.SEYL_PUBLIC_URL ?? "http://localhost:8080";
+const APP = process.env.AI_AGENT_PUBLIC_URL ?? "http://localhost:8080";
 const { url: KEYCLOAK, close } = await keycloakAdmin();
 let failures = 0;
 const check = (ok: boolean, what: string) => {
@@ -31,13 +31,13 @@ const adminToken = (
   ).json()) as { access_token: string }
 ).access_token;
 const kc = (path: string, init: RequestInit = {}) =>
-  fetch(`${KEYCLOAK}/admin/realms/seyl${path}`, { ...init, headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json" } });
+  fetch(`${KEYCLOAK}/admin/realms/ai-agent${path}`, { ...init, headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json" } });
 
 const created: string[] = [];
 async function createUser() {
   const username = `test-${randomBytes(3).toString("hex")}`;
   const password = randomBytes(12).toString("base64url") + "-Aa1!";
-  await kc("/users", { method: "POST", body: JSON.stringify({ username, email: `${username}@seyl.test`, emailVerified: true, firstName: "Test", enabled: true }) });
+  await kc("/users", { method: "POST", body: JSON.stringify({ username, email: `${username}@ai-agent.test`, emailVerified: true, firstName: "Test", enabled: true }) });
   const [{ id }] = (await (await kc(`/users?username=${username}&exact=true`)).json()) as { id: string }[];
   await kc(`/users/${id}/reset-password`, { method: "PUT", body: JSON.stringify({ type: "password", value: password, temporary: false }) });
   created.push(id);
@@ -58,7 +58,7 @@ try {
 
   // 3. The right password → session cookie
   await a.signIn(alice.username, alice.password);
-  check(a.cookies.has("seyl_session"), "callback sets the session cookie");
+  check(a.cookies.has("ai_agent_session"), "callback sets the session cookie");
   const me = (await (await a.api("/auth/me")).json()) as { user?: { username?: string } };
   check(me.user?.username === alice.username, `signed in as ${me.user?.username}`);
 
@@ -81,10 +81,10 @@ try {
   check(own.status === 204, "the owner can delete it");
 
   // 5. Logout ends the session server-side (the old cookie is dead)
-  const oldCookie = a.cookies.get("seyl_session")!;
+  const oldCookie = a.cookies.get("ai_agent_session")!;
   const { logoutUrl } = (await (await a.api("/auth/logout", { method: "POST" })).json()) as { logoutUrl: string };
   check(logoutUrl.includes("/protocol/openid-connect/logout"), "logout returns the identity provider's end-session URL");
-  const replay = await fetch(`${APP}/api/auth/me`, { headers: { Cookie: `seyl_session=${oldCookie}` } });
+  const replay = await fetch(`${APP}/api/auth/me`, { headers: { Cookie: `ai_agent_session=${oldCookie}` } });
   check(replay.status === 401, "the old session cookie no longer works (replay → 401)");
 
   // 6. Signed out = no access

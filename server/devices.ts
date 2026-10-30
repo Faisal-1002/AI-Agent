@@ -6,13 +6,13 @@ import { sql } from "./db.js";
 import { cleanName } from "./documents.js";
 import { LLM_GATEWAY_URL } from "./opencode.js";
 
-// "Connect a device" — option D's plugs for apps that can't sign in to Keycloak themselves
+// "Connect a device" — for apps that can't sign in to Keycloak themselves
 // (the OpenCode CLI, OpenWork desktop). A signed-in user connects a device and gets two
 // secrets, shown ONCE:
 //   - a gateway key (a LiteLLM virtual key): only the chat models, rate-limited, expires,
 //     tied to the user — used at <public URL>/llm/v1 (deploy/nginx.conf);
-//   - an MCP token for Seyl's document tools at <public URL>/mcp.
-// Seyl stores only hashes: the gateway's own hashed key id (enough to revoke the key) and the
+//   - an MCP token for Ai-Agent's document tools at <public URL>/mcp.
+// Ai-Agent stores only hashes: the gateway's own hashed key id (enough to revoke the key) and the
 // SHA-256 of the MCP token. Revoking a device kills both at once.
 //
 // Creating keys needs the gateway's admin key (LITELLM_ADMIN_KEY), held only by the api.
@@ -20,7 +20,7 @@ import { LLM_GATEWAY_URL } from "./opencode.js";
 // a narrower role is the cleaner design once there's more than one api.
 
 const ADMIN_KEY = process.env.LITELLM_ADMIN_KEY;
-const PUBLIC_URL = process.env.SEYL_PUBLIC_URL ?? "http://localhost:8080";
+const PUBLIC_URL = process.env.AI_AGENT_PUBLIC_URL ?? "http://localhost:8080";
 const DEVICE_MODELS = ["qwen3.5-9b", "qwen3.5-0.8b"]; // chat + titles; never voice/guard/embeddings
 const MAX_DEVICES = 10; // per user
 const KEY_DAYS = 90;
@@ -87,13 +87,13 @@ devices.post("/", async (c) => {
     user_id: user.sub,
     rpm_limit: RPM_LIMIT,
     duration: `${KEY_DAYS}d`,
-    metadata: { seyl_device: id, seyl_owner: user.sub, kind: "device" },
+    metadata: { ai_agent_device: id, ai_agent_owner: user.sub, kind: "device" },
   });
   const apiKey = String(key.key ?? "");
   const keyHash = String(key.token ?? "");
   if (!apiKey || !keyHash) throw new Error("The model gateway didn't return a key.");
 
-  const mcpToken = `seyl_mcp_${randomBytes(32).toString("base64url")}`;
+  const mcpToken = `ai_agent_mcp_${randomBytes(32).toString("base64url")}`;
   try {
     const [row] = await sql<Row[]>`
       INSERT INTO devices (id, owner, name, gateway_key_hash, mcp_token_hash, expires_at)

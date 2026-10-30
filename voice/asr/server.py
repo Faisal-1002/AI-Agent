@@ -34,7 +34,7 @@ model = LazyModel(
     idle_seconds=float(os.environ.get("UNLOAD_AFTER_SECONDS", "900")),
 )
 
-app = FastAPI(title="seyl-ai ASR")
+app = FastAPI(title="Ai-Agent ASR")
 
 
 def decode(audio: bytes) -> np.ndarray:

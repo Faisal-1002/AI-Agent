@@ -44,7 +44,7 @@ model = LazyModel(
     idle_seconds=float(os.environ.get("UNLOAD_AFTER_SECONDS", "900")),
 )
 
-app = FastAPI(title="seyl-ai TTS")
+app = FastAPI(title="Ai-Agent TTS")
 
 
 class SpeechRequest(BaseModel):

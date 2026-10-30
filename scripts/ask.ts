@@ -1,13 +1,13 @@
-// Ask seyl-ai a question through the real API and report what the agent did.
+// Ask Ai-Agent a question through the real API and report what the agent did.
 //
 //   npm run ask -- "What files are in the workspace?"
 //   npm run ask -- --runs 3 "According to my documents, …"      # repeat to measure reliability
-//   SEYL_URL=http://localhost:5173 npm run ask -- "…"            # against npm run dev
+//   AI_AGENT_URL=http://localhost:5173 npm run ask -- "…"        # against npm run dev
 //   npm run ask -- --keep "…"                                     # keep the test conversations
 //   npm run ask -- --think "…"                                    # reason first (the UI's Think button)
 //
 // Each run uses a fresh conversation, deleted afterwards unless --keep is given.
-// When login is on, it signs in as SEYL_ASK_USER (default "faisal", password SEYL_USER_PASSWORD).
+// When login is on, it signs in as AI_AGENT_ASK_USER (default "faisal", password AI_AGENT_USER_PASSWORD).
 //
 // Reports per run: tools used, seconds, and whether a visible answer came out (a thinking
 // model can end a turn with its answer only in its "thoughts" — this makes that measurable).
@@ -19,7 +19,7 @@ try {
   process.loadEnvFile();
 } catch {}
 
-const BASE = process.env.SEYL_URL ?? "http://localhost:8080";
+const BASE = process.env.AI_AGENT_URL ?? "http://localhost:8080";
 const args = process.argv.slice(2);
 const runsFlag = args.indexOf("--runs");
 const runs = runsFlag >= 0 ? Number(args.splice(runsFlag, 2)[1]) : 1;
@@ -32,7 +32,7 @@ if (!question) throw new Error('Usage: npm run ask -- [--runs N] "question"');
 
 const session = new Session(BASE);
 if ((await session.api("/auth/me")).status === 401) {
-  await session.signIn(process.env.SEYL_ASK_USER ?? "faisal", process.env.SEYL_USER_PASSWORD ?? "");
+  await session.signIn(process.env.AI_AGENT_ASK_USER ?? "faisal", process.env.AI_AGENT_USER_PASSWORD ?? "");
 }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {

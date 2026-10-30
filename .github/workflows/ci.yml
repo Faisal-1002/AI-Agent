@@ -1,17 +1,15 @@
-# Seyl CI: every push to the main branch and every pull request runs these checks on GitHub's
+# CI: every push to main and every pull request runs these checks on GitHub's
 # machines. Nothing here needs the running stack (no models, no Keycloak, no cluster) — the
 # integration tests (auth:test, devices:test, approvals:test, tenancy:test, guard:eval) still run
 # locally against the live stack.
 #
-# The main branch is seyl/main in the company repo (seyl-ai/seyl-ai-experiment), main elsewhere.
 # Pushes to other branches don't run it, so CI minutes are only spent on what is about to land.
-# (Organization Actions must be enabled for it to run in the company repo.)
 
 name: CI
 
 on:
   push:
-    branches: [main, seyl/main]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -38,7 +36,7 @@ jobs:
       - run: npm run build
       - run: npm run license:check
       - name: Python files compile (gateway guard, voice services)
-        run: python3 -m py_compile gateway/seyl_guard.py voice/lazy_model.py voice/asr/server.py voice/tts/server.py
+        run: python3 -m py_compile gateway/ai_agent_guard.py voice/lazy_model.py voice/asr/server.py voice/tts/server.py
       - name: Kubernetes manifests render
         run: cp .env.example .env && kubectl kustomize . > /dev/null
 
@@ -62,16 +60,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - name: app (harness + api)
-        run: docker build -f deploy/app.Dockerfile -t seyl-ai/app:ci .
+        run: docker build -f deploy/app.Dockerfile -t ai-agent/app:ci .
       - name: web (UI + nginx edge)
-        run: docker build -f deploy/web.Dockerfile -t seyl-ai/web:ci .
+        run: docker build -f deploy/web.Dockerfile -t ai-agent/web:ci .
       - name: nginx config is valid
         # nginx resolves upstream names at start; point them anywhere for the syntax check.
         run: >
           docker run --rm --add-host api:127.0.0.1 --add-host litellm:127.0.0.1 --add-host keycloak:127.0.0.1
-          seyl-ai/web:ci nginx -t
+          ai-agent/web:ci nginx -t
       - name: gateway (fails if LiteLLM's proprietary enterprise code is still importable)
-        run: docker build -f gateway/Dockerfile -t seyl-ai/gateway:ci .
+        run: docker build -f gateway/Dockerfile -t ai-agent/gateway:ci .
       - name: keycloak (+ login theme)
-        run: docker build -f deploy/keycloak.Dockerfile -t seyl-ai/keycloak:ci .
+        run: docker build -f deploy/keycloak.Dockerfile -t ai-agent/keycloak:ci .
       # The voice images (asr, tts) are left out: several GB of PyTorch for little signal.

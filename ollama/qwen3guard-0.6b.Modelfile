@@ -8,7 +8,7 @@
 # renders the policy text itself (server/guard-template.json) and this template only adds the
 # chat markers, reproducing the official format exactly — including the empty <think> block.
 #
-# Create with: ollama create seyl-qwen3guard-0.6b -f ollama/qwen3guard-0.6b.Modelfile
+# Create with: ollama create ai-agent-qwen3guard-0.6b -f ollama/qwen3guard-0.6b.Modelfile
 FROM hf.co/mradermacher/Qwen3Guard-Gen-0.6B-GGUF:Q8_0
 TEMPLATE """<|im_start|>user
 {{ .Prompt }}<|im_end|>

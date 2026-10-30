@@ -1,4 +1,4 @@
-"""Seyl's safety filter inside the gateway — so EVERY app is screened, not just the web app.
+"""Ai-Agent's safety filter inside the gateway — so EVERY app is screened, not just the web app.
 
 Connected devices (the OpenCode CLI, OpenWork desktop) talk to the gateway directly, so the
 check that the api does for the web app (server/guard.ts) has to happen here too. Same model
@@ -60,7 +60,7 @@ def blocked(verdict: dict) -> bool:
     )
 
 
-class SeylGuard(CustomGuardrail):
+class AiAgentGuard(CustomGuardrail):
     async def async_pre_call_hook(self, user_api_key_dict: Any, cache: Any, data: dict, call_type: Any) -> Optional[dict]:
         if data.get("model") not in SCREENED_MODELS:
             return data
@@ -82,12 +82,12 @@ class SeylGuard(CustomGuardrail):
             )
             verdict = parse(response.choices[0].message.content or "")
         except Exception as err:  # fail closed
-            print(f"[seyl-guard] check failed: {err}", flush=True)
-            raise HTTPException(status_code=503, detail="The Seyl safety filter is unavailable right now, so this message can't be checked. Try again in a minute.")
+            print(f"[ai-agent-guard] check failed: {err}", flush=True)
+            raise HTTPException(status_code=503, detail="The Ai-Agent safety filter is unavailable right now, so this message can't be checked. Try again in a minute.")
 
         if verdict["safety"] != "Safe":
-            print(f"[seyl-guard] {verdict['safety']}: {', '.join(verdict['categories']) or '-'} (key {getattr(user_api_key_dict, 'key_alias', None)})", flush=True)
+            print(f"[ai-agent-guard] {verdict['safety']}: {', '.join(verdict['categories']) or '-'} (key {getattr(user_api_key_dict, 'key_alias', None)})", flush=True)
         if blocked(verdict):
             why = ", ".join(verdict["categories"]) or verdict["safety"]
-            raise HTTPException(status_code=400, detail=f"Seyl can't help with that: the safety filter flagged it ({why}).")
+            raise HTTPException(status_code=400, detail=f"Ai-Agent can't help with that: the safety filter flagged it ({why}).")
         return data

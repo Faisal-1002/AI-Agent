@@ -21,7 +21,7 @@ export const OPENCODE_URL = env.OPENCODE_URL ?? `http://127.0.0.1:${OPENCODE_POR
 // requires a password — OpenCode's own HTTP Basic auth — and only the api knows it. Anything
 // else that can reach it (another pod, a process on the PC) gets 401. Set in the containers;
 // optional with npm run dev, where the harness listens on 127.0.0.1 only.
-export const HARNESS_USER = env.OPENCODE_SERVER_USERNAME ?? "seyl-api";
+export const HARNESS_USER = env.OPENCODE_SERVER_USERNAME ?? "ai-agent-api";
 const HARNESS_PASSWORD = env.OPENCODE_SERVER_PASSWORD;
 if (env.NODE_ENV === "production" && (HARNESS_PASSWORD ?? "").length < 32) {
   throw new Error("OPENCODE_SERVER_PASSWORD (32+ characters) is required in production (see .env.example)");
@@ -32,8 +32,8 @@ export const HARNESS_AUTHORIZATION = HARNESS_PASSWORD
 
 // The harness's own small admin port (server/harness.ts): creates the spaces' folders, which live
 // on the harness's volume. Same password.
-export const HARNESS_ADMIN_PORT = Number(env.SEYL_HARNESS_ADMIN_PORT ?? OPENCODE_PORT + 1);
-export const HARNESS_ADMIN_URL = env.SEYL_HARNESS_ADMIN_URL ?? `http://127.0.0.1:${HARNESS_ADMIN_PORT}`;
+export const HARNESS_ADMIN_PORT = Number(env.AI_AGENT_HARNESS_ADMIN_PORT ?? OPENCODE_PORT + 1);
+export const HARNESS_ADMIN_URL = env.AI_AGENT_HARNESS_ADMIN_URL ?? `http://127.0.0.1:${HARNESS_ADMIN_PORT}`;
 
 // The LiteLLM gateway (gateway/config.yaml) — the only way the harness reaches a model.
 // It uses its own key, which may call only the chat models (scripts/gateway-keys.ts).
@@ -49,10 +49,10 @@ const SMALL_MODEL = "qwen3.5-0.8b"; // quick jobs such as chat titles
 export const MODEL = { providerID: "gateway", modelID: MAIN_MODEL };
 export const FAST_VARIANT = "fast"; // the main model without thinking (see variants below)
 
-// seyl-ai's own agent: its system prompt (server/prompts/seyl-ai.md) replaces OpenCode's
+// Ai-Agent's own agent: its system prompt (server/prompts/ai-agent.md) replaces OpenCode's
 // built-in coding prompt, and it may only use the read-only tools below.
-export const AGENT = "seyl";
-const SYSTEM_PROMPT = readFileSync(new URL("./prompts/seyl-ai.md", import.meta.url), "utf8");
+export const AGENT = "ai-agent";
+const SYSTEM_PROMPT = readFileSync(new URL("./prompts/ai-agent.md", import.meta.url), "utf8");
 export const MODEL_INFO: ModelInfo = { provider: "LiteLLM", name: "Qwen3.5 9B", vision: true };
 
 // File changes need the user's approval — except inside a .git folder (or a .git file), never:
@@ -110,7 +110,7 @@ export const config: Config = {
   agent: {
     [AGENT]: {
       mode: "primary",
-      description: "seyl-ai: a local assistant that finds, searches and reads workspace files",
+      description: "Ai-Agent: a local assistant that finds, searches and reads workspace files",
       prompt: SYSTEM_PROMPT,
       // What this agent may do: "allow" (on its own), "ask" (pauses; the UI shows Allow / Deny)
       // or "deny" (the tool isn't even offered — fewer tool definitions = fewer tokens).

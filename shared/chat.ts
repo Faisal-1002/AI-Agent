@@ -2,7 +2,7 @@
 // The backend translates OpenCode's data into these; the UI only knows these.
 
 // Every state-changing API request must send this header with the value "1" (server/csrf.ts).
-export const CSRF_HEADER = "X-Seyl-Csrf";
+export const CSRF_HEADER = "X-Ai-Agent-Csrf";
 
 export type ToolStatus = "pending" | "running" | "completed" | "error";
 
@@ -64,7 +64,7 @@ export type DocumentInfo = {
 };
 
 // "Connect a device" (server/devices.ts): an app such as the OpenCode CLI or OpenWork desktop,
-// connected to Seyl with its own model key and document-tools token.
+// connected to Ai-Agent with its own model key and document-tools token.
 export type DeviceInfo = { id: string; name: string; createdAt: string; lastUsedAt?: string; expiresAt: string };
 
 // Returned ONCE, when a device is connected: the two secrets are never shown again.

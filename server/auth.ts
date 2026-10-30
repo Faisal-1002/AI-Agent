@@ -15,16 +15,16 @@ import { safeReturnTo } from "./redirect.js";
 //
 //   browser ─► /api/auth/login ─► Keycloak login page ─► /api/auth/callback?code=…
 //   api ─(back channel)─► Keycloak: code + PKCE verifier + client secret ─► ID token (signature checked)
-//   api ─► session row in Postgres ─► cookie "seyl_session" (random id; only its hash is stored)
+//   api ─► session row in Postgres ─► cookie "ai_agent_session" (random id; only its hash is stored)
 //
 // Keycloak here, but any OIDC provider works the same (on AWS: Amazon Cognito).
 
 const env = process.env;
 export const AUTH_ENABLED = env.AUTH_ENABLED === "true";
-const PUBLIC_URL = env.SEYL_PUBLIC_URL ?? "http://localhost:8080";
-const ISSUER = env.OIDC_ISSUER ?? `${PUBLIC_URL}/auth/realms/seyl`; // what tokens say
+const PUBLIC_URL = env.AI_AGENT_PUBLIC_URL ?? "http://localhost:8080";
+const ISSUER = env.OIDC_ISSUER ?? `${PUBLIC_URL}/auth/realms/ai-agent`; // what tokens say
 const INTERNAL_ISSUER = env.OIDC_INTERNAL_ISSUER; // how the api reaches it (e.g. http://keycloak:8080/…)
-const CLIENT_ID = env.OIDC_CLIENT_ID ?? "seyl-web";
+const CLIENT_ID = env.OIDC_CLIENT_ID ?? "ai-agent-web";
 const REDIRECT_URI = `${PUBLIC_URL}/api/auth/callback`;
 const SESSION_HOURS = 8;
 const SECURE_COOKIES = PUBLIC_URL.startsWith("https://") || new URL(PUBLIC_URL).hostname === "localhost";
@@ -37,15 +37,15 @@ const SECURE_COOKIES = PUBLIC_URL.startsWith("https://") || new URL(PUBLIC_URL).
 if (env.NODE_ENV === "production" && env.AUTH_ENABLED !== "true" && env.AUTH_ENABLED !== "false") {
   throw new Error(`AUTH_ENABLED must be "true" or "false" in production (got ${JSON.stringify(env.AUTH_ENABLED)})`);
 }
-if (AUTH_ENABLED && ((env.SEYL_SESSION_SECRET ?? "").length < 32 || !env.OIDC_CLIENT_SECRET)) {
-  throw new Error("AUTH_ENABLED=true needs SEYL_SESSION_SECRET (32+ characters) and OIDC_CLIENT_SECRET (see .env.example)");
+if (AUTH_ENABLED && ((env.AI_AGENT_SESSION_SECRET ?? "").length < 32 || !env.OIDC_CLIENT_SECRET)) {
+  throw new Error("AUTH_ENABLED=true needs AI_AGENT_SESSION_SECRET (32+ characters) and OIDC_CLIENT_SECRET (see .env.example)");
 }
 if (ISSUER.startsWith("https://") && INTERNAL_ISSUER && !INTERNAL_ISSUER.startsWith("https://")) {
   throw new Error("OIDC_INTERNAL_ISSUER must use https when the issuer does");
 }
 
 // 32-byte key for the short-lived login cookie (AES-256-GCM via jose).
-const flowKey = () => createHash("sha256").update(env.SEYL_SESSION_SECRET ?? "").digest();
+const flowKey = () => createHash("sha256").update(env.AI_AGENT_SESSION_SECRET ?? "").digest();
 const hash = (sessionId: string) => createHash("sha256").update(sessionId).digest("hex");
 
 // ── Provider configuration (discovered once, retried if Keycloak isn't up yet) ──
@@ -77,7 +77,7 @@ function provider(): Promise<oidc.Configuration> {
 type SessionRow = { sub: string; name: string; email: string | null; username: string | null; id_token: string };
 
 async function sessionUser(c: Context): Promise<(User & { idToken: string }) | undefined> {
-  const id = getCookie(c, "seyl_session");
+  const id = getCookie(c, "ai_agent_session");
   if (!id) return undefined;
   const [row] = await sql<SessionRow[]>`
     SELECT sub, name, email, username, id_token FROM auth_sessions WHERE id_hash = ${hash(id)} AND expires_at > now()`;
@@ -124,7 +124,7 @@ export function authRoutes(onLogin: (user: User) => Promise<void>) {
       returnTo: safeReturnTo(c.req.query("returnTo"), PUBLIC_URL), // no open redirects (server/redirect.ts)
     };
     const sealed = await new EncryptJWT(flow).setProtectedHeader({ alg: "dir", enc: "A256GCM" }).setExpirationTime("10m").encrypt(flowKey());
-    setCookie(c, "seyl_login", sealed, { httpOnly: true, secure: SECURE_COOKIES, sameSite: "Lax", path: "/api/auth", maxAge: 600 });
+    setCookie(c, "ai_agent_login", sealed, { httpOnly: true, secure: SECURE_COOKIES, sameSite: "Lax", path: "/api/auth", maxAge: 600 });
 
     const url = oidc.buildAuthorizationUrl(await provider(), {
       redirect_uri: REDIRECT_URI,
@@ -139,8 +139,8 @@ export function authRoutes(onLogin: (user: User) => Promise<void>) {
 
   // 2. Back from the login page: exchange the code, verify the ID token, start a session.
   auth.get("/callback", async (c) => {
-    const sealed = getCookie(c, "seyl_login");
-    deleteCookie(c, "seyl_login", { path: "/api/auth" }); // single use, whatever happens next
+    const sealed = getCookie(c, "ai_agent_login");
+    deleteCookie(c, "ai_agent_login", { path: "/api/auth" }); // single use, whatever happens next
     const flow = sealed ? await openFlow(sealed) : undefined;
 
     // An error from the login page counts only if it answers OUR pending sign-in (same state);
@@ -181,7 +181,7 @@ export function authRoutes(onLogin: (user: User) => Promise<void>) {
       INSERT INTO auth_sessions (id_hash, sub, name, email, username, id_token, expires_at)
       VALUES (${hash(sessionId)}, ${user.sub}, ${user.name}, ${user.email ?? null}, ${user.username ?? null},
               ${tokens.id_token ?? ""}, now() + ${`${SESSION_HOURS} hours`}::interval)`;
-    setCookie(c, "seyl_session", sessionId, { httpOnly: true, secure: SECURE_COOKIES, sameSite: "Lax", path: "/", maxAge: SESSION_HOURS * 3600 });
+    setCookie(c, "ai_agent_session", sessionId, { httpOnly: true, secure: SECURE_COOKIES, sameSite: "Lax", path: "/", maxAge: SESSION_HOURS * 3600 });
     await onLogin(user);
     await audit(user.sub, "login", undefined, { username: user.username });
     console.log(`[auth] signed in: ${user.username ?? user.sub}`);
@@ -198,10 +198,10 @@ export function authRoutes(onLogin: (user: User) => Promise<void>) {
   // Sign out here AND at Keycloak (otherwise "Sign in" would log straight back in).
   auth.post("/logout", async (c) => {
     const user = AUTH_ENABLED ? await sessionUser(c) : undefined;
-    const id = getCookie(c, "seyl_session");
+    const id = getCookie(c, "ai_agent_session");
     if (id) await sql`DELETE FROM auth_sessions WHERE id_hash = ${hash(id)}`;
     if (user) await audit(user.sub, "logout");
-    deleteCookie(c, "seyl_session", { path: "/" });
+    deleteCookie(c, "ai_agent_session", { path: "/" });
     if (!user) return c.json({ logoutUrl: "/" });
     const logoutUrl = oidc.buildEndSessionUrl(await provider(), { post_logout_redirect_uri: `${PUBLIC_URL}/`, id_token_hint: user.idToken });
     return c.json({ logoutUrl: logoutUrl.href });

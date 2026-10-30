@@ -2,9 +2,9 @@
 #
 # Kustomize bundles the manifests in k8s/ and turns .env (git-ignored) into a
 # Secret, so secrets never live in Git or in YAML. The Secret's name gets a hash
-# suffix (seyl-secrets-abc123) and every reference to it is rewritten — so
+# suffix (ai-agent-secrets-abc123) and every reference to it is rewritten — so
 # changing a secret automatically rolls out the pods that use it.
-namespace: seyl-ai
+namespace: ai-agent
 
 resources:
   - k8s/00-namespace.yaml
@@ -18,6 +18,6 @@ resources:
   - k8s/80-keycloak.yaml
 
 secretGenerator:
-  - name: seyl-secrets
+  - name: ai-agent-secrets
     envs:
       - .env

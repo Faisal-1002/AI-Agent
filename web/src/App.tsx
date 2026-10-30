@@ -117,7 +117,7 @@ function ChatApp({ user, onSignOut }: { user: User; onSignOut: () => void }) {
           onStop={chat.stop}
         />
         <p className="px-4 py-2 text-center text-xs text-text-tertiary">
-          seyl-ai runs locally on your PC and can make mistakes.
+          Ai-Agent runs locally on your PC and can make mistakes.
         </p>
       </main>
       {documentsOpen && <DocumentsPanel onClose={() => setDocumentsOpen(false)} />}

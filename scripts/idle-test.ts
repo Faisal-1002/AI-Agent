@@ -17,7 +17,7 @@ const setEnv = (...vars: string[]) => {
 const closed = (folder: string) =>
   psql(`SELECT coalesce(closed_at > last_used_at, false) FROM harness_folders WHERE directory = '${folder.replaceAll("'", "")}'`) === "t";
 
-setEnv("SEYL_IDLE_MINUTES=1", "SEYL_IDLE_CHECK_SECONDS=15");
+setEnv("AI_AGENT_IDLE_MINUTES=1", "AI_AGENT_IDLE_CHECK_SECONDS=15");
 const users = await temporaryUsers();
 
 try {
@@ -69,7 +69,7 @@ try {
   await call(`/conversations/${id}`, { method: "DELETE" });
 } finally {
   await users.cleanup();
-  setEnv("SEYL_IDLE_MINUTES-", "SEYL_IDLE_CHECK_SECONDS-"); // back to the normal settings
+  setEnv("AI_AGENT_IDLE_MINUTES-", "AI_AGENT_IDLE_CHECK_SECONDS-"); // back to the normal settings
 }
 
 finish("all idle-folder checks passed");

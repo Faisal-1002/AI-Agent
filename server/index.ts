@@ -224,14 +224,14 @@ app.post("/api/conversations/:id/prompt", bodyLimit({ maxSize: 30 * 1024 * 1024 
       screen.reason ??
       (categories.includes("Suicide & Self-Harm")
         ? "It sounds like you might be going through something really hard. You don't have to face it alone — please consider reaching out to someone you trust, or to a local crisis line or emergency service right now."
-        : `seyl-ai can't help with that — the safety filter flagged it (${why}).`);
+        : `Ai-Agent can't help with that — the safety filter flagged it (${why}).`);
     await audit(c.get("user").sub, "prompt.blocked", sessionID, { safety: screen.verdict?.safety, categories, reason: screen.reason ? "unavailable" : undefined });
     return c.json({ error, blocked: screen.verdict }, 422);
   }
 
   check(await client.session.promptAsync({
     sessionID,
-    agent: AGENT, // seyl-ai's own agent: system prompt + allowed tools (server/opencode.ts)
+    agent: AGENT, // Ai-Agent's own agent: system prompt + allowed tools (server/opencode.ts)
     model: MODEL,
     variant: think ? undefined : FAST_VARIANT,
     parts: [
@@ -257,7 +257,7 @@ function attachedDocumentsPart(documents: AttachedDocument[]) {
     type: "text" as const,
     synthetic: true,
     text: `[The user attached ${one ? "this document" : "these documents"} from their library: ${names}. Read or search ${one ? "it" : "them"} with the docs tools before answering.]`,
-    metadata: { seylDocuments: documents },
+    metadata: { aiAgentDocuments: documents },
   };
 }
 
@@ -385,7 +385,7 @@ app.get("/api/conversations/:id/events", (c) => {
   });
 });
 
-// Create seyl-ai's tables if needed (keeps retrying: the database may start after us).
+// Create Ai-Agent's tables if needed (keeps retrying: the database may start after us).
 async function migrateWithRetry() {
   for (let attempt = 1; ; attempt++) {
     try {
@@ -403,7 +403,7 @@ void watchApprovals(); // "Allow for this chat" answers even when the chat isn't
 startIdleCleanup(); // close folders nobody has used for a while (server/idle.ts)
 
 const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
-  console.log(`seyl-ai backend running at http://${HOST}:${PORT}`);
+  console.log(`Ai-Agent backend running at http://${HOST}:${PORT}`);
 });
 
 // The agent's document tools call in here (server/tools.ts) — its own listener, reachable only

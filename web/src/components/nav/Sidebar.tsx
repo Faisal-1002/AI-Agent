@@ -92,7 +92,7 @@ export function Sidebar({ open, overlay, conversations, activeId, onClose, onNew
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <div className="truncate font-medium">{user.local ? "seyl-ai" : user.name}</div>
+            <div className="truncate font-medium">{user.local ? "Ai-Agent" : user.name}</div>
             {user.email && <div className="truncate text-xs text-text-tertiary">{user.email}</div>}
           </div>
           {!user.local && <IconButton icon={LogOut} label="Sign out" size="sm" onClick={onSignOut} />}

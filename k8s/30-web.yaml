@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: web
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   replicas: 2
   selector:
@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: seyl-ai/web:dev
+          image: ai-agent/web:dev
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
@@ -35,7 +35,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: web
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   type: LoadBalancer
   selector: { app: web }

@@ -51,7 +51,7 @@ export const MessageTurn = memo(function MessageTurn({ turn, streaming, canSpeak
     <div className="group mx-auto flex w-full max-w-3xl gap-3 px-4 py-3 md:px-5">
       <Avatar role={turn.role} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="select-none pt-0.5 text-sm font-semibold">{isUser ? "You" : "seyl-ai"}</div>
+        <div className="select-none pt-0.5 text-sm font-semibold">{isUser ? "You" : "Ai-Agent"}</div>
 
         <div className="flex flex-col gap-2 text-text-primary">
           {flag && <GuardNotice verdict={flag} />}

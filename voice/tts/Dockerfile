@@ -1,4 +1,4 @@
-# seyl-ai text-to-speech: Qwen3-TTS on the CPU.
+# Ai-Agent text-to-speech: Qwen3-TTS on the CPU.
 # Separate from the ASR image on purpose: qwen-tts and qwen-asr pin different
 # transformers versions, so they can't share one Python environment.
 FROM python:3.12-slim

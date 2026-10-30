@@ -20,7 +20,7 @@ export function PermissionCard({ ask, onAnswer }: { ask: PermissionAsk; onAnswer
         <div className="flex items-start gap-2">
           <Icon className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="min-w-0 flex-1">
-            <div className="font-medium">seyl-ai wants to {what}</div>
+            <div className="font-medium">Ai-Agent wants to {what}</div>
             {ask.files.length > 0 && (
               <div className="truncate font-mono text-sm text-text-secondary">{ask.files.join(", ")}</div>
             )}

@@ -4,7 +4,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: asr-models
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -15,7 +15,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: asr
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   replicas: 1
   strategy:
@@ -30,7 +30,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: asr
-          image: seyl-ai/asr:dev
+          image: ai-agent/asr:dev
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
@@ -63,7 +63,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: asr
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   selector: { app: asr }
   ports:

@@ -9,7 +9,7 @@ import { Attachments } from "./Attachments";
 import { ComposerButton } from "./ComposerButton";
 import { MicButton } from "./MicButton";
 
-const THINK_KEY = "seyl.think";
+const THINK_KEY = "ai-agent.think";
 
 // "Think" is remembered per browser; storage can be unavailable (private mode), hence try/catch.
 const savedThink = () => {
@@ -121,8 +121,8 @@ export function ChatForm({ busy, canTranscribe, canAttachImages, onSend, onStop 
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
-            placeholder="Message seyl-ai"
-            aria-label="Message seyl-ai"
+            placeholder="Message Ai-Agent"
+            aria-label="Message Ai-Agent"
             autoFocus
             minRows={1}
             maxRows={12}

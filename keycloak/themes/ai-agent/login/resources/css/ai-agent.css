@@ -1,42 +1,42 @@
 /*
- * seyl-ai look for Keycloak's login pages: the same design as the chat UI, which follows
+ * Ai-Agent look for Keycloak's login pages: the same design as the chat UI, which follows
  * LibreChat's (logo on top, centered form, rounded fields with the label on the border,
  * green "Continue" button). Colours are the app's tokens (web/src/styles.css).
  * Keycloak marks dark mode with .pf-v5-theme-dark on <html>, following the system setting.
  */
 :root {
-  --seyl-bg: #ffffff;
-  --seyl-text: #212121;
-  --seyl-text-2: #424242;
-  --seyl-text-3: #595959;
-  --seyl-border: #e3e3e3;
-  --seyl-border-strong: #cdcdcd;
-  --seyl-green: #047857;
-  --seyl-green-hover: #059669;
-  --seyl-red: #dc2626;
+  --ai-agent-bg: #ffffff;
+  --ai-agent-text: #212121;
+  --ai-agent-text-2: #424242;
+  --ai-agent-text-3: #595959;
+  --ai-agent-border: #e3e3e3;
+  --ai-agent-border-strong: #cdcdcd;
+  --ai-agent-green: #047857;
+  --ai-agent-green-hover: #059669;
+  --ai-agent-red: #dc2626;
   /* The app's system font instead of Keycloak's Red Hat fonts. */
   --pf-v5-global--FontFamily--text: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --pf-v5-global--FontFamily--heading: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --pf-v5-global--FontFamily--redhat-updated--heading: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 :root.pf-v5-theme-dark {
-  --seyl-bg: #0d0d0d;
-  --seyl-text: #ececec;
-  --seyl-text-2: #cdcdcd;
-  --seyl-text-3: #999696;
-  --seyl-border: #2f2f2f;
-  --seyl-border-strong: #424242;
-  --seyl-green: #059669;
-  --seyl-green-hover: #047857;
-  --seyl-red: #f87171;
+  --ai-agent-bg: #0d0d0d;
+  --ai-agent-text: #ececec;
+  --ai-agent-text-2: #cdcdcd;
+  --ai-agent-text-3: #999696;
+  --ai-agent-border: #2f2f2f;
+  --ai-agent-border-strong: #424242;
+  --ai-agent-green: #059669;
+  --ai-agent-green-hover: #047857;
+  --ai-agent-red: #f87171;
 }
 
 /* ── Page ── */
 html,
 body#keycloak-bg,
 .pf-v5-c-login {
-  background: var(--seyl-bg) !important;
-  color: var(--seyl-text);
+  background: var(--ai-agent-bg) !important;
+  color: var(--ai-agent-text);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 .pf-v5-c-login {
@@ -96,7 +96,7 @@ body#keycloak-bg,
   font-size: 1.875rem !important;
   line-height: 2.25rem !important;
   font-weight: 600 !important;
-  color: var(--seyl-text) !important;
+  color: var(--ai-agent-text) !important;
   text-align: center;
 }
 .pf-v5-c-login__main-body,
@@ -117,22 +117,22 @@ body#keycloak-bg,
   left: 0.75rem;
   z-index: 2;
   padding: 0 0.4rem !important;
-  background: var(--seyl-bg);
+  background: var(--ai-agent-bg);
   line-height: 1;
 }
 .pf-v5-c-form__label-text {
   font-size: 0.75rem !important;
   font-weight: 400 !important;
-  color: var(--seyl-text-3) !important;
+  color: var(--ai-agent-text-3) !important;
 }
 .pf-v5-c-form__group:focus-within .pf-v5-c-form__label-text {
-  color: var(--seyl-green) !important;
+  color: var(--ai-agent-green) !important;
 }
 .pf-v5-c-form-control,
 .pf-v5-c-input-group {
-  border: 1px solid var(--seyl-border) !important;
+  border: 1px solid var(--ai-agent-border) !important;
   border-radius: 1rem !important;
-  background: var(--seyl-bg) !important;
+  background: var(--ai-agent-bg) !important;
   transition: border-color 0.2s;
 }
 .pf-v5-c-form-control::before,
@@ -145,14 +145,14 @@ body#keycloak-bg,
 .pf-v5-c-form-control > input {
   padding: 0.8rem 0.875rem 0.65rem !important;
   font-size: 1rem !important;
-  color: var(--seyl-text) !important;
+  color: var(--ai-agent-text) !important;
   background: transparent !important;
   border: 0 !important;
   outline: none !important;
 }
 .pf-v5-c-form-control:focus-within,
 .pf-v5-c-input-group:focus-within {
-  border-color: var(--seyl-green) !important;
+  border-color: var(--ai-agent-green) !important;
 }
 /* Password: field and the 👁 button form one rounded box. (No overflow: hidden — it would
    clip keycloak.v2's tooltips, e.g. "Restart login" next to a read-only username.) */
@@ -172,11 +172,11 @@ body#keycloak-bg,
 .pf-v5-c-button.pf-m-control {
   background: transparent !important;
   border: 0 !important;
-  color: var(--seyl-text-3) !important;
+  color: var(--ai-agent-text-3) !important;
   padding: 0 0.9rem !important;
 }
 .pf-v5-c-button.pf-m-control:hover {
-  color: var(--seyl-text) !important;
+  color: var(--ai-agent-text) !important;
 }
 
 /* ── Continue button ── */
@@ -187,7 +187,7 @@ body#keycloak-bg,
   padding: 0.75rem 1rem !important;
   border: 0 !important;
   border-radius: 1rem !important;
-  background: var(--seyl-green) !important;
+  background: var(--ai-agent-green) !important;
   color: #fff !important;
   font-size: 0.875rem !important;
   font-weight: 500 !important;
@@ -195,10 +195,10 @@ body#keycloak-bg,
 }
 #kc-login:hover,
 .pf-v5-c-button.pf-m-primary:hover {
-  background: var(--seyl-green-hover) !important;
+  background: var(--ai-agent-green-hover) !important;
 }
 #kc-login:focus-visible {
-  outline: 2px solid var(--seyl-green) !important;
+  outline: 2px solid var(--ai-agent-green) !important;
   outline-offset: 2px;
 }
 .pf-v5-c-button.pf-m-primary::after {
@@ -210,47 +210,47 @@ body#keycloak-bg,
 .pf-v5-c-button.pf-m-link,
 .pf-v5-c-login a,
 .pf-v5-c-login__main-footer-band a {
-  color: var(--seyl-green) !important;
+  color: var(--ai-agent-green) !important;
 }
 .pf-v5-c-button.pf-m-secondary {
   background: transparent !important;
   border-radius: 1rem !important;
 }
 .pf-v5-c-button.pf-m-secondary::after {
-  border-color: var(--seyl-border-strong) !important;
+  border-color: var(--ai-agent-border-strong) !important;
   border-radius: 1rem !important;
 }
 
 /* ── Messages: notes in a quiet box; errors as LibreChat shows them (red outline, light red fill) ── */
 .pf-v5-c-alert {
-  border: 1px solid var(--seyl-border-strong) !important;
+  border: 1px solid var(--ai-agent-border-strong) !important;
   border-radius: 1rem !important;
-  background: color-mix(in srgb, var(--seyl-text) 5%, transparent) !important;
+  background: color-mix(in srgb, var(--ai-agent-text) 5%, transparent) !important;
   box-shadow: none !important;
-  color: var(--seyl-text) !important;
+  color: var(--ai-agent-text) !important;
 }
 .pf-v5-c-alert.pf-m-danger,
 .pf-v5-c-alert.pf-m-warning {
-  border-color: var(--seyl-red) !important;
-  background: color-mix(in srgb, var(--seyl-red) 10%, transparent) !important;
+  border-color: var(--ai-agent-red) !important;
+  background: color-mix(in srgb, var(--ai-agent-red) 10%, transparent) !important;
 }
 .pf-v5-c-alert::before {
   display: none !important;
 }
 .pf-v5-c-alert__title,
 .pf-v5-c-alert__icon {
-  color: var(--seyl-text) !important;
+  color: var(--ai-agent-text) !important;
 }
 .pf-v5-c-helper-text__item-text,
 #input-error,
 #input-error-username,
 #input-error-password {
-  color: var(--seyl-red) !important;
+  color: var(--ai-agent-red) !important;
   font-size: 0.8125rem;
 }
 .pf-v5-c-form-control:has(input[aria-invalid="true"]),
 .pf-v5-c-input-group:has(input[aria-invalid="true"]) {
-  border-color: var(--seyl-red) !important;
+  border-color: var(--ai-agent-red) !important;
 }
 
 /* The one-time-code page uses the button text ("Continue") as its heading: give it its own. */
@@ -265,9 +265,9 @@ body[data-page-id="login-login-otp"] #kc-page-title::after {
 
 /* Footer line, as in the app's sign-in screen. */
 .pf-v5-c-login__container::after {
-  content: "seyl-ai runs locally on your PC · your conversations stay on this machine";
+  content: "Ai-Agent runs locally on your PC · your conversations stay on this machine";
   margin-top: 2.5rem;
   font-size: 0.75rem;
-  color: var(--seyl-text-3);
+  color: var(--ai-agent-text-3);
   text-align: center;
 }

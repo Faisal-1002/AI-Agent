@@ -30,10 +30,10 @@ function Connected({ device, onDone }: { device: NewDevice; onDone: () => void }
   return (
     <div className="flex flex-col gap-3">
       <div className="rounded-xl border border-amber-500/50 bg-amber-500/5 px-3 py-2 text-sm">
-        <span className="font-semibold">Copy these now</span> — Seyl keeps only a fingerprint, so they won't be shown again.
+        <span className="font-semibold">Copy these now</span> — Ai-Agent keeps only a fingerprint, so they won't be shown again.
       </div>
-      <Secret label="Model key (SEYL_API_KEY)" value={device.apiKey} />
-      <Secret label="Document-tools token (SEYL_MCP_TOKEN)" value={device.mcpToken} />
+      <Secret label="Model key (AI_AGENT_API_KEY)" value={device.apiKey} />
+      <Secret label="Document-tools token (AI_AGENT_MCP_TOKEN)" value={device.mcpToken} />
 
       <p className="pt-1 text-sm font-medium">1. On “{device.device.name}”, save them as environment variables</p>
       <CodeBlock language="powershell">{env.powershell}</CodeBlock>
@@ -54,7 +54,7 @@ function Connected({ device, onDone }: { device: NewDevice; onDone: () => void }
   );
 }
 
-// "Connect a device": Seyl's model gateway and document tools for the OpenCode CLI, OpenWork
+// "Connect a device": Ai-Agent's model gateway and document tools for the OpenCode CLI, OpenWork
 // desktop and other apps that can't sign in themselves (server/devices.ts).
 export function DevicesPanel({ onClose }: { onClose: () => void }) {
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
@@ -114,7 +114,7 @@ export function DevicesPanel({ onClose }: { onClose: () => void }) {
             <h2 id="devices-title" className="text-lg font-semibold">
               Devices
             </h2>
-            <p className="text-sm text-text-secondary">Use Seyl from the OpenCode CLI, OpenWork desktop and other apps.</p>
+            <p className="text-sm text-text-secondary">Use Ai-Agent from the OpenCode CLI, OpenWork desktop and other apps.</p>
           </div>
           {!created && <IconButton icon={X} label="Close" onClick={onClose} />}
         </div>

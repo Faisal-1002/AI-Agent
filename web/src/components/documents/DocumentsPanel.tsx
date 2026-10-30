@@ -52,7 +52,7 @@ export function DocumentsPanel({ onClose }: { onClose: () => void }) {
 
   const confirmDelete = (id: string) => {
     const doc = documents.find((d) => d.id === id);
-    if (window.confirm(`Delete "${doc?.name}" from the library? seyl-ai won't be able to search it any more.`)) void remove(id);
+    if (window.confirm(`Delete "${doc?.name}" from the library? Ai-Agent won't be able to search it any more.`)) void remove(id);
   };
 
   return (
@@ -69,7 +69,7 @@ export function DocumentsPanel({ onClose }: { onClose: () => void }) {
             <h2 id="documents-title" className="text-lg font-semibold">
               Documents
             </h2>
-            <p className="text-sm text-text-secondary">seyl-ai searches these when answering your questions.</p>
+            <p className="text-sm text-text-secondary">Ai-Agent searches these when answering your questions.</p>
           </div>
           <IconButton icon={X} label="Close" onClick={onClose} />
         </div>

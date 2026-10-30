@@ -1,7 +1,7 @@
 # Qwen3.5 0.8B — a tiny helper for quick jobs (chat titles).
 # Runs on the CPU (num_gpu 0) so the GPU's 10 GB stays free for the main model:
 # when VRAM overflows, Windows spills it into system RAM and everything slows ~50x.
-# Create with: ollama create seyl-qwen3.5-0.8b -f ollama/qwen3.5-0.8b.Modelfile
+# Create with: ollama create ai-agent-qwen3.5-0.8b -f ollama/qwen3.5-0.8b.Modelfile
 FROM qwen3.5:0.8b
 PARAMETER num_ctx 8192
 PARAMETER num_gpu 0

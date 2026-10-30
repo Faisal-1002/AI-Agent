@@ -3,7 +3,7 @@ import { CSRF_HEADER, type ChatMessage, type Conversation, type DocumentInfo, ty
 // Every call carries the anti-CSRF header (server/csrf.ts): another site can't add it.
 const withCsrf = (init: RequestInit = {}): RequestInit => ({ ...init, headers: { [CSRF_HEADER]: "1", ...init.headers } });
 
-// Typed wrappers around the seyl-ai backend (server/index.ts).
+// Typed wrappers around the Ai-Agent backend (server/index.ts).
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, withCsrf(init));
   // Session expired (or signed out in another tab): reload, and the login screen appears.

@@ -22,11 +22,11 @@ process.env.OPENCODE_SERVER_USERNAME ??= HARNESS_USER;
 // can write to. One approved edit there would change the rules (or run code) for every user.
 process.env.OPENCODE_DISABLE_PROJECT_CONFIG = "1";
 // OpenCode's own config folder: our custom tools (the docs_* tools). The image sets a root-owned
-// copy (/opt/seyl/config). With npm run dev: a fresh copy of the repo's harness-config/ OUTSIDE
+// copy (/opt/ai-agent/config). With npm run dev: a fresh copy of the repo's harness-config/ OUTSIDE
 // the repo (OpenCode npm-installs a package into a config folder it can write to) — and not your
 // personal ~/.config/opencode, whose MCP servers and settings would otherwise join in.
 if (!process.env.XDG_CONFIG_HOME) {
-  const devConfig = path.join(os.homedir(), ".seyl-ai", "config");
+  const devConfig = path.join(os.homedir(), ".ai-agent", "config");
   await rm(path.join(devConfig, "opencode", "tools"), { recursive: true, force: true });
   await cp(path.resolve("harness-config"), devConfig, { recursive: true });
   process.env.XDG_CONFIG_HOME = devConfig;

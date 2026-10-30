@@ -1,6 +1,6 @@
 ﻿# Qwen3-Embedding 0.6B — turns text into 1024-number vectors for document search.
 # On the CPU (num_gpu 0): the GPU stays reserved for the chat model.
-# Create with: ollama create seyl-qwen3-embedding-0.6b -f ollama/qwen3-embedding-0.6b.Modelfile
+# Create with: ollama create ai-agent-qwen3-embedding-0.6b -f ollama/qwen3-embedding-0.6b.Modelfile
 FROM qwen3-embedding:0.6b
 PARAMETER num_gpu 0
 PARAMETER num_ctx 8192

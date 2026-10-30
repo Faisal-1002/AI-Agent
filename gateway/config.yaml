@@ -1,4 +1,4 @@
-# LiteLLM gateway: one OpenAI-compatible API in front of every model seyl-ai uses.
+# LiteLLM gateway: one OpenAI-compatible API in front of every model Ai-Agent uses.
 # Consumers only know the gateway and the model NAMES below — not where the models run.
 # Moving a model (e.g. Ollama → Amazon Bedrock on AWS) means editing only this file.
 #
@@ -11,7 +11,7 @@ model_list:
   # Chat — served by Ollama on the host GPU (its OpenAI-compatible /v1 API).
   - model_name: qwen3.5-9b
     litellm_params:
-      model: openai/seyl-qwen3.5-9b
+      model: openai/ai-agent-qwen3.5-9b
       api_base: os.environ/OLLAMA_API_BASE
       extra_body: { keep_alive: 1h }
       api_key: ollama # Ollama ignores it; the OpenAI client requires one
@@ -23,7 +23,7 @@ model_list:
 
   - model_name: qwen3.5-0.8b
     litellm_params:
-      model: openai/seyl-qwen3.5-0.8b
+      model: openai/ai-agent-qwen3.5-0.8b
       api_base: os.environ/OLLAMA_API_BASE
       extra_body: { keep_alive: 1h }
       api_key: ollama
@@ -33,7 +33,7 @@ model_list:
   # Safety classifier — Qwen3Guard on Ollama (CPU). Called by the backend, never by the agent.
   - model_name: qwen3-guard
     litellm_params:
-      model: openai/seyl-qwen3guard-0.6b
+      model: openai/ai-agent-qwen3guard-0.6b
       api_base: os.environ/OLLAMA_API_BASE
       extra_body: { keep_alive: 1h }
       api_key: ollama
@@ -43,7 +43,7 @@ model_list:
   # Embeddings — Qwen3-Embedding on Ollama (CPU): text → 1024 numbers, for document search.
   - model_name: qwen3-embedding
     litellm_params:
-      model: openai/seyl-qwen3-embedding-0.6b
+      model: openai/ai-agent-qwen3-embedding-0.6b
       api_base: os.environ/OLLAMA_API_BASE
       extra_body: { keep_alive: 1h }
       api_key: ollama
@@ -68,12 +68,12 @@ model_list:
     model_info:
       mode: audio_speech
 
-# Seyl's safety filter on every chat call from outside apps (gateway/seyl_guard.py): the same
+# Ai-Agent's safety filter on every chat call from outside apps (gateway/ai_agent_guard.py): the same
 # Qwen3Guard check the api runs for the web app, so connected devices are screened too.
 guardrails:
-  - guardrail_name: seyl-guard
+  - guardrail_name: ai-agent-guard
     litellm_params:
-      guardrail: seyl_guard.SeylGuard # gateway/seyl_guard.py, next to this file in the image
+      guardrail: ai_agent_guard.AiAgentGuard # gateway/ai_agent_guard.py, next to this file in the image
       mode: pre_call
       default_on: true
 

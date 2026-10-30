@@ -4,7 +4,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: tts-models
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -15,7 +15,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: tts
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   replicas: 1
   strategy:
@@ -30,7 +30,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: tts
-          image: seyl-ai/tts:dev
+          image: ai-agent/tts:dev
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
@@ -61,7 +61,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: tts
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   selector: { app: tts }
   ports:

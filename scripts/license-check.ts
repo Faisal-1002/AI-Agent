@@ -1,4 +1,4 @@
-// License check for the npm dependencies (Seyl builds only on permissive open source).
+// License check for the npm dependencies (Ai-Agent builds only on permissive open source).
 // Reads the licenses npm records in package-lock.json — no extra tool. Fails (exit 1) on any
 // license outside the policy, so CI stops a new dependency before it ships.
 //

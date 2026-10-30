@@ -1,5 +1,5 @@
 // Keycloak's admin API and admin ("master") realm are NOT published through the app's nginx
-// (only the seyl realm is). Admin scripts talk to Keycloak directly, on this PC only:
+// (only the ai-agent realm is). Admin scripts talk to Keycloak directly, on this PC only:
 //   - KEYCLOAK_URL, if set;
 //   - else (Kubernetes) this run's own `kubectl port-forward`, on a free local port — never
 //     shared with another script, whose tunnel could close in the middle of this run;
@@ -31,7 +31,7 @@ export async function keycloakAdmin(): Promise<{ url: string; close: () => void 
 
   const port = await freePort();
   const url = `http://127.0.0.1:${port}/auth`;
-  const forward = spawn("kubectl", ["-n", "seyl-ai", "port-forward", "--address", "127.0.0.1", "svc/keycloak", `${port}:8080`], {
+  const forward = spawn("kubectl", ["-n", "ai-agent", "port-forward", "--address", "127.0.0.1", "svc/keycloak", `${port}:8080`], {
     stdio: "ignore",
   });
   let gone = false; // no kubectl, or no cluster (e.g. running Docker Compose)

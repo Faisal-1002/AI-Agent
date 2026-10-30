@@ -12,7 +12,7 @@ import { Session } from "./lib/session.js";
 try {
   process.loadEnvFile();
 } catch {}
-const APP = process.env.SEYL_PUBLIC_URL ?? "http://localhost:8080";
+const APP = process.env.AI_AGENT_PUBLIC_URL ?? "http://localhost:8080";
 let failures = 0;
 const check = (ok: boolean, what: string) => {
   console.log(`${ok ? "✓" : "✗"} ${what}`);
@@ -21,11 +21,11 @@ const check = (ok: boolean, what: string) => {
 
 const { url: KC, close } = await keycloakAdmin();
 const token = ((await (await fetch(`${KC}/realms/master/protocol/openid-connect/token`, { method: "POST", body: new URLSearchParams({ grant_type: "password", client_id: "admin-cli", username: "admin", password: process.env.KEYCLOAK_ADMIN_PASSWORD ?? "" }) })).json()) as { access_token: string }).access_token;
-const kc = (path: string, init: RequestInit = {}) => fetch(`${KC}/admin/realms/seyl${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
+const kc = (path: string, init: RequestInit = {}) => fetch(`${KC}/admin/realms/ai-agent${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
 const created: string[] = [];
 async function user() {
   const username = `dev-${randomBytes(3).toString("hex")}`, password = randomBytes(12).toString("base64url") + "-Aa1!";
-  await kc("/users", { method: "POST", body: JSON.stringify({ username, email: `${username}@seyl.test`, emailVerified: true, firstName: "Dev", enabled: true }) });
+  await kc("/users", { method: "POST", body: JSON.stringify({ username, email: `${username}@ai-agent.test`, emailVerified: true, firstName: "Dev", enabled: true }) });
   const [{ id }] = (await (await kc(`/users?username=${username}&exact=true`)).json()) as { id: string }[];
   await kc(`/users/${id}/reset-password`, { method: "PUT", body: JSON.stringify({ type: "password", value: password, temporary: false }) });
   created.push(id);
@@ -50,7 +50,7 @@ try {
   // Connect a device
   const res = await alice.api("/devices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Test laptop" }) });
   const dev = (await res.json()) as { device: { id: string }; apiKey: string; mcpToken: string; gatewayUrl: string; mcpUrl: string };
-  check(res.status === 201 && dev.apiKey.startsWith("sk-") && dev.mcpToken.startsWith("seyl_mcp_"), "connect a device → 201 with a gateway key and an MCP token");
+  check(res.status === 201 && dev.apiKey.startsWith("sk-") && dev.mcpToken.startsWith("ai_agent_mcp_"), "connect a device → 201 with a gateway key and an MCP token");
   check(dev.gatewayUrl === `${APP}/llm/v1` && dev.mcpUrl === `${APP}/mcp`, "returns the public gateway and MCP URLs");
   const list = await (await alice.api("/devices")).text();
   check(!list.includes(dev.apiKey) && !list.includes(dev.mcpToken) && list.includes("Test laptop"), "device list shows the device but never its secrets");
@@ -68,16 +68,16 @@ try {
   const ok = await mcp(`Bearer ${dev.mcpToken}`);
   const tools = await ok.text();
   check(ok.status === 200 && tools.includes("search_documents"), "device MCP token lists the document tools at /mcp");
-  check((await mcp(`Bearer ${process.env.SEYL_MCP_TOKEN}`)).status === 401, "the harness's internal token is refused at /mcp");
+  check((await mcp(`Bearer ${process.env.AI_AGENT_MCP_TOKEN}`)).status === 401, "the harness's internal token is refused at /mcp");
   check((await mcp(undefined)).status === 401, "no token → 401");
-  check((await mcp(`Bearer seyl_mcp_${"A".repeat(43)}`)).status === 401, "a made-up device token → 401");
+  check((await mcp(`Bearer ai_agent_mcp_${"A".repeat(43)}`)).status === 401, "a made-up device token → 401");
   check((await mcp(`Bearer ${dev.mcpToken}`, { Origin: "https://evil.example" })).status === 403, "a browser request (Origin header) → 403");
 
   // Isolation
   const bobsView = (await (await bob.api("/devices")).json()) as unknown[];
   check(bobsView.length === 0, "another user doesn't see the device");
   check((await bob.api(`/devices/${dev.device.id}`, { method: "DELETE" })).status === 404, "another user can't disconnect it (404)");
-  const noCsrf = await fetch(`${APP}/api/devices`, { method: "POST", headers: { Cookie: `seyl_session=${alice.cookies.get("seyl_session")}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: "x" }) });
+  const noCsrf = await fetch(`${APP}/api/devices`, { method: "POST", headers: { Cookie: `ai_agent_session=${alice.cookies.get("ai_agent_session")}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: "x" }) });
   check(noCsrf.status === 403, "connecting without the anti-CSRF header → 403");
 
   // Revoke

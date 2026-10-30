@@ -1,6 +1,6 @@
-﻿# Qwen3.5 9B — seyl-ai's main model: agent loop, tools, thinking, and images.
+﻿# Qwen3.5 9B — Ai-Agent's main model: agent loop, tools, thinking, and images.
 # 32k context: OpenCode's system prompt + tool definitions are large, and
 # Ollama's default is too small. Still fits entirely on a 10 GB GPU.
-# Create with: ollama create seyl-qwen3.5-9b -f ollama/qwen3.5-9b.Modelfile
+# Create with: ollama create ai-agent-qwen3.5-9b -f ollama/qwen3.5-9b.Modelfile
 FROM qwen3.5:9b
 PARAMETER num_ctx 32768

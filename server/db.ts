@@ -1,14 +1,14 @@
 import postgres from "postgres";
 
-// seyl-ai's own database (documents and their vectors), separate from the gateway's.
-// Connects as the least-privilege "seyl" role (scripts/db-setup.ts creates it).
+// Ai-Agent's own database (documents and their vectors), separate from the gateway's.
+// Connects as the least-privilege "ai_agent" role (scripts/db-setup.ts creates it).
 const env = process.env;
 export const sql = postgres({
-  host: env.SEYL_DB_HOST ?? "127.0.0.1",
-  port: Number(env.SEYL_DB_PORT ?? 5432),
-  database: "seyl",
-  user: "seyl",
-  password: env.SEYL_DB_PASSWORD,
+  host: env.AI_AGENT_DB_HOST ?? "127.0.0.1",
+  port: Number(env.AI_AGENT_DB_PORT ?? 5432),
+  database: "ai_agent",
+  user: "ai_agent",
+  password: env.AI_AGENT_DB_PASSWORD,
   max: 5,
   onnotice: () => {},
 });

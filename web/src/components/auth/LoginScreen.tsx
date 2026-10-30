@@ -34,7 +34,7 @@ export function LoginScreen({ onSignIn, error }: { onSignIn: () => void; error?:
 
       <main className="flex flex-grow items-center justify-center">
         <div className="w-full max-w-sm overflow-hidden px-6 py-4 sm:max-w-md sm:rounded-lg">
-          <h1 className="mb-2 text-center text-3xl font-semibold">Welcome to seyl-ai</h1>
+          <h1 className="mb-2 text-center text-3xl font-semibold">Welcome to Ai-Agent</h1>
           <p className="mb-6 text-center text-sm text-text-secondary">Your AI assistant, running on this PC. Sign in to continue.</p>
 
           {message && (
@@ -59,7 +59,7 @@ export function LoginScreen({ onSignIn, error }: { onSignIn: () => void; error?:
       </main>
 
       <footer className="px-4 pb-4 text-center text-xs text-text-tertiary">
-        seyl-ai runs locally on your PC · your conversations stay on this machine
+        Ai-Agent runs locally on your PC · your conversations stay on this machine
       </footer>
     </div>
   );

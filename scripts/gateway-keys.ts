@@ -1,4 +1,4 @@
-// Registers seyl-ai's per-consumer keys in the LiteLLM gateway (safe to run again: it updates).
+// Registers Ai-Agent's per-consumer keys in the LiteLLM gateway (safe to run again: it updates).
 //
 //   npm run gateway:keys                      # gateway at http://127.0.0.1:4000 (Compose)
 //   GATEWAY_URL=http://127.0.0.1:4001 npm run gateway:keys   # e.g. through kubectl port-forward
@@ -29,7 +29,7 @@ const KEYS = [
     // qwen3.5-9b: only to load it into memory ahead of time (1-token requests, server/warmup.ts).
     models: ["qwen3-asr", "qwen3-tts", "qwen3-guard", "qwen3-embedding", "qwen3.5-9b"],
     rpm_limit: 300, // a runaway client can't flood the CPU-bound models (indexing sends batches)
-    metadata: { purpose: "Voice, the safety filter, document embeddings and model warm-up, called by the seyl-ai API" },
+    metadata: { purpose: "Voice, the safety filter, document embeddings and model warm-up, called by the Ai-Agent API" },
   },
 ];
 

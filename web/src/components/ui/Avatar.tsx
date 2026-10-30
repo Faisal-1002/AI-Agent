@@ -7,7 +7,7 @@ type Props = { role: Role; size?: "sm" | "md" | "lg" };
 const BOX = { sm: "size-7", md: "size-10", lg: "size-14" };
 const ICON = { sm: "size-4", md: "size-5", lg: "size-7" };
 
-// Round icon for "You" and "seyl-ai".
+// Round icon for "You" and "Ai-Agent".
 export function Avatar({ role, size = "sm" }: Props) {
   const Icon = role === "user" ? UserRound : Sparkles;
   return (

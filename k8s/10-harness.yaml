@@ -6,7 +6,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: opencode-data
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -18,7 +18,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: harness
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   replicas: 1
   strategy:
@@ -37,7 +37,7 @@ spec:
       # cp -n never overwrites, so edits survive every restart and upgrade.
       initContainers:
         - name: seed-workspace
-          image: seyl-ai/app:dev
+          image: ai-agent/app:dev
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "cp -rn /workspace-seed/. /workspace/"]
           volumeMounts:
@@ -46,7 +46,7 @@ spec:
               subPath: workspace
       containers:
         - name: harness
-          image: seyl-ai/app:dev
+          image: ai-agent/app:dev
           imagePullPolicy: IfNotPresent # use the locally built image
           command: ["node", "--import", "tsx", "server/harness.ts"]
           env:
@@ -54,15 +54,15 @@ spec:
               value: http://litellm:4000
             - name: LITELLM_KEY_HARNESS # this pod's own key: chat models only
               valueFrom:
-                secretKeyRef: { name: seyl-secrets, key: LITELLM_KEY_HARNESS }
-            - name: SEYL_DOCS_URL # the agent's document tools call the api here — its internal port
+                secretKeyRef: { name: ai-agent-secrets, key: LITELLM_KEY_HARNESS }
+            - name: AI_AGENT_DOCS_URL # the agent's document tools call the api here — its internal port
               value: http://api:3001/internal/docs
-            - name: SEYL_MCP_TOKEN
+            - name: AI_AGENT_MCP_TOKEN
               valueFrom:
-                secretKeyRef: { name: seyl-secrets, key: SEYL_MCP_TOKEN }
+                secretKeyRef: { name: ai-agent-secrets, key: AI_AGENT_MCP_TOKEN }
             - name: OPENCODE_SERVER_PASSWORD # OpenCode requires it on every request; only the api has it
               valueFrom:
-                secretKeyRef: { name: seyl-secrets, key: OPENCODE_SERVER_PASSWORD }
+                secretKeyRef: { name: ai-agent-secrets, key: OPENCODE_SERVER_PASSWORD }
           ports:
             - containerPort: 4097 # OpenCode
             - containerPort: 4098 # admin: creates the spaces' folders (same password)
@@ -95,7 +95,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: harness
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   selector: { app: harness }
   ports:

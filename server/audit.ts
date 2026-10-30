@@ -2,9 +2,9 @@ import { sql } from "./db.js";
 
 // The audit log: who did what, and when — table audit.log. Append-only for the api: its
 // database user may only INSERT and SELECT there. The schema and table belong to a separate
-// role (seyl_audit, created by scripts/db-setup.ts), so the api can't update, delete, truncate
+// role (ai_agent_audit, created by scripts/db-setup.ts), so the api can't update, delete, truncate
 // or drop rows, and can't switch off the trigger that refuses changes either — neither a bug nor
-// an injected query can rewrite history. (A database admin still could; a hosted Seyl would
+// an injected query can rewrite history. (A database admin still could; a hosted Ai-Agent would
 // ship the log to a separate store.) No message text or secrets go in here: only actions and ids.
 
 export type AuditAction =

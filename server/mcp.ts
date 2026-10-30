@@ -6,7 +6,7 @@ import { deviceOwner } from "./devices.js";
 import { personalSpace } from "./spaces.js";
 import { listText, readText, searchText } from "./tools.js";
 
-// seyl-ai's MCP server: the document tools for connected devices.
+// Ai-Agent's MCP server: the document tools for connected devices.
 //
 // MCP (Model Context Protocol) is the open standard for giving agents tools. A device that the
 // user connected (the OpenCode CLI, OpenWork… — server/devices.ts) reaches it through nginx at
@@ -19,7 +19,7 @@ import { listText, readText, searchText } from "./tools.js";
 // devices get their tokens from a signed-in user on the "Connect a device" page instead.
 
 function createServer(space: string): McpServer {
-  const server = new McpServer({ name: "seyl-docs", version: "1.0.0" });
+  const server = new McpServer({ name: "ai-agent-docs", version: "1.0.0" });
   const text = (value: string) => ({ content: [{ type: "text" as const, text: value }] });
 
   server.registerTool(
@@ -61,7 +61,7 @@ function createServer(space: string): McpServer {
   return server;
 }
 
-const DEVICE_TOKEN = /^Bearer (seyl_mcp_[A-Za-z0-9_-]{43})$/;
+const DEVICE_TOKEN = /^Bearer (ai_agent_mcp_[A-Za-z0-9_-]{43})$/;
 
 export const deviceMcp = new Hono();
 // Stateless: every request gets a fresh server + transport (nothing to share between api pods).

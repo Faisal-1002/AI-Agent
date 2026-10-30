@@ -1,4 +1,4 @@
-# seyl-ai gateway image: LiteLLM + our model list, baked in — MIT code only.
+# Ai-Agent gateway image: LiteLLM + our model list, baked in — MIT code only.
 # Config ships inside the image (like code), so every environment runs exactly what was built.
 # Secrets are NOT in here — they arrive as environment variables at runtime.
 #
@@ -8,7 +8,7 @@ FROM docker.litellm.ai/berriai/litellm:main-stable@sha256:df15400b5b80925c45d3fd
 
 # The official image also ships LiteLLM's PROPRIETARY enterprise code — the litellm-enterprise
 # package and the /app/enterprise folder (BerriAI Enterprise License) — and the proxy loads it
-# automatically whenever it can be imported. Seyl runs only the MIT parts: delete both, then
+# automatically whenever it can be imported. Ai-Agent runs only the MIT parts: delete both, then
 # fail the build if either could still be imported.
 RUN rm -rf /app/enterprise \
            /app/.venv/lib/python3.13/site-packages/litellm_enterprise \
@@ -20,6 +20,6 @@ RUN rm -rf /app/enterprise \
 
 # Built from the repo root, so the guard uses the very same prompt template as the api.
 COPY gateway/config.yaml /app/config.yaml
-COPY gateway/seyl_guard.py /app/seyl_guard.py
+COPY gateway/ai_agent_guard.py /app/ai_agent_guard.py
 COPY server/guard-template.json /app/guard-template.json
 CMD ["--config", "/app/config.yaml", "--port", "4000"]

@@ -6,21 +6,21 @@ import path from "node:path";
 // own folder; a conversation's agent works only in its space's folder. What OpenCode 1.18.33
 // needs for that to hold (README, "Workspaces"):
 //  - no folder inside a git repository: OpenCode would treat the whole repository as the project
-//    and let the agent read all of it (with npm run dev, that was the seyl-ai repo, .env included);
+//    and let the agent read all of it (with npm run dev, that was the Ai-Agent repo, .env included);
 //  - folders side by side, never one inside another: OpenCode lets the agent read anything inside
 //    its own folder, other people's folders included;
 //  - opaque ids as folder names (OpenCode URL-decodes the folder name twice).
 const env = process.env;
 
 // Containers: /data/workspaces (the harness's persistent volume). npm run dev: in your home folder.
-export const WORKSPACES_ROOT = path.resolve(env.SEYL_WORKSPACES_ROOT ?? path.join(os.homedir(), ".seyl-ai", "workspaces"));
+export const WORKSPACES_ROOT = path.resolve(env.AI_AGENT_WORKSPACES_ROOT ?? path.join(os.homedir(), ".ai-agent", "workspaces"));
 
 // Before spaces there was ONE folder for everyone. Old conversations still point there: they stay
 // readable, but the api no longer lets the agent work in them.
-export const LEGACY_WORKSPACE = path.resolve(env.SEYL_WORKSPACE ?? "workspace");
+export const LEGACY_WORKSPACE = path.resolve(env.AI_AGENT_WORKSPACE ?? "workspace");
 
 // The starter files a new space gets (the image's /workspace-seed; the repo's workspace/ in dev).
-export const WORKSPACE_SEED = path.resolve(env.SEYL_WORKSPACE_SEED ?? "workspace");
+export const WORKSPACE_SEED = path.resolve(env.AI_AGENT_WORKSPACE_SEED ?? "workspace");
 
 // An empty folder for the harness calls that aren't about anyone's conversation (health check,
 // startup policy check). A call that forgot its folder lands here: no one's files, not /app.

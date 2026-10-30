@@ -8,7 +8,7 @@ import { conversationOf } from "./owners.js";
 // "Allow for this chat" — really for this chat.
 //
 // OpenCode's own "always" reply adds an allow rule to the WHOLE folder (every conversation in it,
-// until it restarts; its edit tool's "always" pattern is "*"). So Seyl never sends "always". It
+// until it restarts; its edit tool's "always" pattern is "*"). So Ai-Agent never sends "always". It
 // stores the approval as a rule for ONE conversation, answers OpenCode "once", and from then on
 // answers matching requests in that conversation "once" by itself — whether or not anyone has the
 // chat open (watchApprovals).

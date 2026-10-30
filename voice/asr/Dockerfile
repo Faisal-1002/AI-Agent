@@ -1,4 +1,4 @@
-# seyl-ai speech-to-text: Qwen3-ASR on the CPU.
+# Ai-Agent speech-to-text: Qwen3-ASR on the CPU.
 FROM python:3.12-slim
 
 # ffmpeg decodes whatever the browser records (webm/opus, ogg, mp4, wav).

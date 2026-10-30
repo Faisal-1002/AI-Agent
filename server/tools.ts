@@ -11,7 +11,7 @@ import { conversationOf } from "./owners.js";
 // with the conversation id and folder that OpenCode gave them (never the model). This endpoint
 // looks up who owns that conversation and answers from THAT space's library only. It listens on
 // the api's internal port (MCP_PORT, 3001), which nginx never forwards, and needs the shared
-// SEYL_MCP_TOKEN — so only the harness can call it, and only for conversations that exist.
+// AI_AGENT_MCP_TOKEN — so only the harness can call it, and only for conversations that exist.
 // Connected devices get the same tools over MCP, scoped by their own token (server/mcp.ts).
 
 export async function searchText(space: string, query: string, limit = 5): Promise<string> {
@@ -33,9 +33,9 @@ export async function readText(space: string, name: string, page: number): Promi
   return doc ? `${doc.name} — page ${doc.page} of ${doc.pages}\n\n${doc.text}` : `No ready document named "${name}". Use list_documents to see the names.`;
 }
 
-const TOKEN = process.env.SEYL_MCP_TOKEN;
-if (TOKEN !== undefined && TOKEN.length < 32) throw new Error("SEYL_MCP_TOKEN must be at least 32 characters");
-if (!TOKEN) console.warn("[tools] SEYL_MCP_TOKEN is not set: the agent's document tools are disabled");
+const TOKEN = process.env.AI_AGENT_MCP_TOKEN;
+if (TOKEN !== undefined && TOKEN.length < 32) throw new Error("AI_AGENT_MCP_TOKEN must be at least 32 characters");
+if (!TOKEN) console.warn("[tools] AI_AGENT_MCP_TOKEN is not set: the agent's document tools are disabled");
 
 // Compare in constant time (hash both sides first, so lengths match too): a plain !== returns
 // earlier the more characters are wrong, which leaks the token bit by bit over many tries.

@@ -1,4 +1,4 @@
-# seyl-ai "app" image: runs EITHER the OpenCode harness OR the backend API.
+# Ai-Agent "app" image: runs EITHER the OpenCode harness OR the backend API.
 # Same code, same image — the container command decides which (see docker-compose.yml, k8s/).
 FROM node:24-slim
 
@@ -29,23 +29,23 @@ COPY --chown=node:node workspace /workspace
 COPY --chown=node:node workspace /workspace-seed
 # OpenCode's config folder with our custom tools (the docs_* tools). Owned by root, so neither the
 # agent nor OpenCode can change it — and OpenCode doesn't try to npm-install anything into it.
-COPY harness-config/opencode/tools /opt/seyl/config/opencode/tools
-COPY harness-config/opencode/.gitignore /opt/seyl/config/opencode/.gitignore
+COPY harness-config/opencode/tools /opt/ai-agent/config/opencode/tools
+COPY harness-config/opencode/.gitignore /opt/ai-agent/config/opencode/.gitignore
 
 # OpenCode keeps sessions, caches and downloaded provider packages under XDG dirs: /data, so one
 # volume persists everything — the spaces' folders too (/data/workspaces). Its CONFIG is the
-# read-only /opt/seyl/config above.
+# read-only /opt/ai-agent/config above.
 RUN mkdir -p /data && chown node:node /data
 ENV NODE_ENV=production \
-    SEYL_WORKSPACE=/workspace \
-    SEYL_WORKSPACES_ROOT=/data/workspaces \
-    SEYL_WORKSPACE_SEED=/workspace-seed \
+    AI_AGENT_WORKSPACE=/workspace \
+    AI_AGENT_WORKSPACES_ROOT=/data/workspaces \
+    AI_AGENT_WORKSPACE_SEED=/workspace-seed \
     HOST=0.0.0.0 \
     OPENCODE_HOSTNAME=0.0.0.0 \
     XDG_DATA_HOME=/data/share \
     XDG_CACHE_HOME=/data/cache \
     XDG_STATE_HOME=/data/state \
-    XDG_CONFIG_HOME=/opt/seyl/config
+    XDG_CONFIG_HOME=/opt/ai-agent/config
 
 # Don't run as root.
 USER node

@@ -9,7 +9,7 @@ import { Session } from "./session.js";
 try {
   process.loadEnvFile();
 } catch {}
-export const APP = process.env.SEYL_PUBLIC_URL ?? "http://localhost:8080";
+export const APP = process.env.AI_AGENT_PUBLIC_URL ?? "http://localhost:8080";
 
 let failures = 0;
 export function check(ok: boolean, what: string) {
@@ -22,8 +22,8 @@ export function finish(passed: string) {
 }
 
 export const kubectl = (...args: string[]) =>
-  execFileSync("kubectl", ["-n", "seyl-ai", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-export const psql = (query: string) => kubectl("exec", "deploy/db", "--", "psql", "-U", "seyl", "-d", "seyl", "-v", "ON_ERROR_STOP=1", "-tAc", query);
+  execFileSync("kubectl", ["-n", "ai-agent", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+export const psql = (query: string) => kubectl("exec", "deploy/db", "--", "psql", "-U", "ai_agent", "-d", "ai_agent", "-v", "ON_ERROR_STOP=1", "-tAc", query);
 
 // Ids go into shell commands and SQL: only plain ones.
 export function safe(id: string): string {
@@ -44,7 +44,7 @@ export function inHarness(path: string, kind: "-f" | "-d" = "-f"): boolean {
 // Run a little script inside an api pod — it has the harness password in its environment, which
 // never leaves the pod. `code` gets HARNESS_AUTH (the Basic auth header) in scope.
 export function inApi(code: string): string {
-  const auth = `const HARNESS_AUTH = "Basic " + Buffer.from((process.env.OPENCODE_SERVER_USERNAME || "seyl-api") + ":" + process.env.OPENCODE_SERVER_PASSWORD).toString("base64");`;
+  const auth = `const HARNESS_AUTH = "Basic " + Buffer.from((process.env.OPENCODE_SERVER_USERNAME || "ai-agent-api") + ":" + process.env.OPENCODE_SERVER_PASSWORD).toString("base64");`;
   return kubectl("exec", "deploy/api", "--", "node", "-e", `${auth}\n${code}`);
 }
 
@@ -100,13 +100,13 @@ export async function temporaryUsers() {
   const form = { grant_type: "password", client_id: "admin-cli", username: "admin", password: process.env.KEYCLOAK_ADMIN_PASSWORD ?? "" };
   const { access_token } = (await (await fetch(`${KC}/realms/master/protocol/openid-connect/token`, { method: "POST", body: new URLSearchParams(form) })).json()) as { access_token: string };
   const kc = (path: string, init: RequestInit = {}) =>
-    fetch(`${KC}/admin/realms/seyl${path}`, { ...init, headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" } });
+    fetch(`${KC}/admin/realms/ai-agent${path}`, { ...init, headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" } });
   const subs: string[] = []; // Keycloak's user id is the OIDC "sub"
 
   async function create(prefix: string): Promise<TempUser> {
     const username = `${prefix}-${randomBytes(3).toString("hex")}`;
     const password = randomBytes(12).toString("base64url") + "-Aa1!";
-    await kc("/users", { method: "POST", body: JSON.stringify({ username, email: `${username}@seyl.test`, emailVerified: true, firstName: prefix, enabled: true }) });
+    await kc("/users", { method: "POST", body: JSON.stringify({ username, email: `${username}@ai-agent.test`, emailVerified: true, firstName: prefix, enabled: true }) });
     const [{ id }] = (await (await kc(`/users?username=${username}&exact=true`)).json()) as { id: string }[];
     subs.push(safe(id));
     await kc(`/users/${id}/reset-password`, { method: "PUT", body: JSON.stringify({ type: "password", value: password, temporary: false }) });

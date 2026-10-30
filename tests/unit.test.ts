@@ -112,11 +112,11 @@ describe("CSRF guard", () => {
   });
 });
 
-describe("device config: locked to Seyl, no secrets in the file", () => {
+describe("device config: locked to Ai-Agent, no secrets in the file", () => {
   const device: NewDevice = {
     device: { id: "d1", name: "Laptop", createdAt: "", expiresAt: "" },
     apiKey: "sk-THIS-MUST-NOT-APPEAR", // gitleaks:allow (fake, on purpose)
-    mcpToken: "seyl_mcp_THIS_MUST_NOT_APPEAR", // gitleaks:allow (fake, on purpose)
+    mcpToken: "ai_agent_mcp_THIS_MUST_NOT_APPEAR", // gitleaks:allow (fake, on purpose)
     gatewayUrl: `${HOME}/llm/v1`,
     mcpUrl: `${HOME}/mcp`,
     models: ["qwen3.5-9b", "qwen3.5-0.8b"],
@@ -124,19 +124,19 @@ describe("device config: locked to Seyl, no secrets in the file", () => {
   const text = opencodeConfig(device);
   const config = JSON.parse(text);
 
-  it("allows only the Seyl provider (no silent cloud fallback)", () => assert.deepEqual(config.enabled_providers, ["seyl"]));
+  it("allows only the Ai-Agent provider (no silent cloud fallback)", () => assert.deepEqual(config.enabled_providers, ["ai-agent"]));
   it("turns sharing off and asks before commands, edits and web", () => {
     assert.equal(config.share, "disabled");
     assert.deepEqual(config.permission, { edit: "ask", bash: "ask", webfetch: "ask" });
   });
   it("reads the secrets from the environment", () => {
     assert.ok(!text.includes(device.apiKey) && !text.includes(device.mcpToken));
-    assert.equal(config.provider.seyl.options.apiKey, "{env:SEYL_API_KEY}");
-    assert.equal(config.mcp["seyl-docs"].headers.Authorization, "Bearer {env:SEYL_MCP_TOKEN}");
+    assert.equal(config.provider["ai-agent"].options.apiKey, "{env:AI_AGENT_API_KEY}");
+    assert.equal(config.mcp["ai-agent-docs"].headers.Authorization, "Bearer {env:AI_AGENT_MCP_TOKEN}");
   });
-  it("points at the Seyl gateway and MCP entrance", () => {
-    assert.equal(config.provider.seyl.options.baseURL, device.gatewayUrl);
-    assert.equal(config.mcp["seyl-docs"].url, device.mcpUrl);
+  it("points at the Ai-Agent gateway and MCP entrance", () => {
+    assert.equal(config.provider["ai-agent"].options.baseURL, device.gatewayUrl);
+    assert.equal(config.mcp["ai-agent-docs"].url, device.mcpUrl);
   });
 });
 
@@ -155,7 +155,7 @@ describe("paths are shown relative to the user's folder", () => {
   it("pattern relative to the root", () => assert.equal(displayPath(`${dir.slice(1)}/notes.md`, dir), "notes.md"));
   it("absolute path", () => assert.equal(displayPath(`${dir}/sub/a.md`, dir), "sub/a.md"));
   it("Windows path", () =>
-    assert.equal(displayPath(String.raw`Users\me\.seyl-ai\workspaces\x\b.md`, String.raw`C:\Users\me\.seyl-ai\workspaces\x`), "b.md"));
+    assert.equal(displayPath(String.raw`Users\me\.ai-agent\workspaces\x\b.md`, String.raw`C:\Users\me\.ai-agent\workspaces\x`), "b.md"));
   it("outside the folder: unchanged", () => assert.equal(displayPath("/etc/passwd", dir), "/etc/passwd"));
   it("a look-alike folder is not inside", () => assert.equal(displayPath(`${dir}x/a.md`, dir), `${dir}x/a.md`));
   it("UI: tool titles lose the space folder", () => {

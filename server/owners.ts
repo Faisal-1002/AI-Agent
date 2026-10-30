@@ -2,7 +2,7 @@ import { sql } from "./db.js";
 import type { Space } from "./spaces.js";
 
 // Who owns which conversation, and where its agent works. OpenCode's sessions have no notion of
-// users — any session id works for anyone who can reach the harness — so seyl-ai keeps the mapping
+// users — any session id works for anyone who can reach the harness — so Ai-Agent keeps the mapping
 // itself (conversation id → the OIDC "sub" of its creator + their space and folder), and every
 // conversation route checks it: other people's conversations are simply "not found".
 

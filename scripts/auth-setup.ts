@@ -1,14 +1,14 @@
-// Configures Keycloak for seyl-ai through its admin API (safe to run again).
+// Configures Keycloak for Ai-Agent through its admin API (safe to run again).
 //
 //   npm run auth:setup      # reaches Keycloak's admin API directly (scripts/lib/keycloak-admin.ts)
 //
 // Creates / updates:
-//   - realm "seyl"            — seyl-ai's own space for users (separate from Keycloak's "master")
-//   - client "seyl-web"       — the api, as a CONFIDENTIAL client (it has a secret: OIDC_CLIENT_SECRET)
+//   - realm "ai-agent"        — Ai-Agent's own space for users (separate from Keycloak's "master")
+//   - client "ai-agent-web"   — the api, as a CONFIDENTIAL client (it has a secret: OIDC_CLIENT_SECRET)
 //                               using the Authorization Code flow with PKCE (S256) only
 //   - a security baseline     — a client policy for EVERY client in the realm: PKCE (S256),
 //                               no implicit flow, no password grant (OAuth 2.0 best practice, RFC 9700)
-//   - user "faisal"           — a local test account (password: SEYL_USER_PASSWORD in .env)
+//   - user "faisal"           — a local test account (password: AI_AGENT_USER_PASSWORD in .env)
 //   - master realm            — brute-force protection for the admin account
 
 import { keycloakAdmin } from "./lib/keycloak-admin.js";
@@ -18,8 +18,8 @@ try {
 } catch {}
 
 const { url: KEYCLOAK, close } = await keycloakAdmin();
-const PUBLIC_URL = process.env.SEYL_PUBLIC_URL ?? "http://localhost:8080";
-const REALM = "seyl";
+const PUBLIC_URL = process.env.AI_AGENT_PUBLIC_URL ?? "http://localhost:8080";
+const REALM = "ai-agent";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -48,8 +48,8 @@ async function admin(method: string, path: string, body?: unknown) {
 // ── Realm ──
 const realm = {
   realm: REALM,
-  displayName: "seyl-ai",
-  loginTheme: "seyl", // the app's look on the login page (keycloak/themes/seyl)
+  displayName: "Ai-Agent",
+  loginTheme: "ai-agent", // the app's look on the login page (keycloak/themes/ai-agent)
   enabled: true,
   registrationAllowed: false, // accounts are created by an admin, not by strangers
   loginWithEmailAllowed: true,
@@ -57,7 +57,7 @@ const realm = {
   accessTokenLifespan: 300,
   ssoSessionIdleTimeout: 8 * 3600,
   // Refresh tokens are single-use (best practice for public clients such as the account
-  // console). seyl-web doesn't keep refresh tokens at all.
+  // console). ai-agent-web doesn't keep refresh tokens at all.
   revokeRefreshToken: true,
   refreshTokenMaxReuse: 0,
 };
@@ -75,8 +75,8 @@ console.log("✓ user profile: first and last name optional");
 
 // ── Client (the api, as a BFF) ──
 const client = {
-  clientId: "seyl-web",
-  name: "seyl-ai",
+  clientId: "ai-agent-web",
+  name: "Ai-Agent",
   enabled: true,
   protocol: "openid-connect",
   publicClient: false, // confidential: the api keeps a secret; browsers never see tokens
@@ -92,20 +92,20 @@ const client = {
     "post.logout.redirect.uris": `${PUBLIC_URL}/`, // exact: no wildcard (no redirect to arbitrary paths)
   },
 };
-const [existingClient] = ((await admin("GET", `/${REALM}/clients?clientId=seyl-web`)) ?? []) as { id: string }[];
+const [existingClient] = ((await admin("GET", `/${REALM}/clients?clientId=ai-agent-web`)) ?? []) as { id: string }[];
 if (existingClient) await admin("PUT", `/${REALM}/clients/${existingClient.id}`, { ...client, id: existingClient.id });
 else await admin("POST", `/${REALM}/clients`, client);
-console.log(`✓ client seyl-web ${existingClient ? "updated" : "created"} (confidential, code flow + PKCE S256)`);
+console.log(`✓ client ai-agent-web ${existingClient ? "updated" : "created"} (confidential, code flow + PKCE S256)`);
 
 // ── Security baseline for every client in the realm (OAuth 2.0 + RFC 9700) ──
-// seyl-web is already configured this way; the policy makes it the rule for ALL clients —
+// ai-agent-web is already configured this way; the policy makes it the rule for ALL clients —
 // including the ones Keycloak creates itself (e.g. "admin-cli" allows the password grant).
 // Not Keycloak's built-in "oauth-2-1-for-confidential-client" profile: that one also demands
-// signed-JWT client authentication and certificate-bound tokens, which seyl-web doesn't do.
+// signed-JWT client authentication and certificate-bound tokens, which ai-agent-web doesn't do.
 await admin("PUT", `/${REALM}/client-policies/profiles`, {
   profiles: [
     {
-      name: "seyl-security-baseline",
+      name: "ai-agent-security-baseline",
       description: "PKCE with S256, no implicit flow, no password grant",
       executors: [
         { executor: "pkce-enforcer", configuration: { "auto-configure": "true" } },
@@ -118,11 +118,11 @@ await admin("PUT", `/${REALM}/client-policies/profiles`, {
 await admin("PUT", `/${REALM}/client-policies/policies`, {
   policies: [
     {
-      name: "seyl-security-baseline",
+      name: "ai-agent-security-baseline",
       description: "Applies the security baseline to every client",
       enabled: true,
       conditions: [{ condition: "any-client", configuration: {} }],
-      profiles: ["seyl-security-baseline"],
+      profiles: ["ai-agent-security-baseline"],
     },
   ],
 });
@@ -138,7 +138,7 @@ console.log("✓ master realm: brute-force protection on");
 // ── Test user ──
 const user = {
   username: "faisal",
-  email: "faisal@seyl.test", // .test is reserved for testing — never a real mailbox
+  email: "faisal@ai-agent.test", // .test is reserved for testing — never a real mailbox
   emailVerified: true,
   firstName: "Faisal",
   lastName: "",
@@ -148,7 +148,7 @@ const [existingUser] = ((await admin("GET", `/${REALM}/users?username=faisal&exa
 if (existingUser) await admin("PUT", `/${REALM}/users/${existingUser.id}`, user);
 else await admin("POST", `/${REALM}/users`, user);
 const [{ id: userId }] = (await admin("GET", `/${REALM}/users?username=faisal&exact=true`)) as { id: string }[];
-await admin("PUT", `/${REALM}/users/${userId}/reset-password`, { type: "password", value: required("SEYL_USER_PASSWORD"), temporary: false });
-console.log(`✓ user faisal ${existingUser ? "updated" : "created"} (password from .env: SEYL_USER_PASSWORD)`);
+await admin("PUT", `/${REALM}/users/${userId}/reset-password`, { type: "password", value: required("AI_AGENT_USER_PASSWORD"), temporary: false });
+console.log(`✓ user faisal ${existingUser ? "updated" : "created"} (password from .env: AI_AGENT_USER_PASSWORD)`);
 
 close();

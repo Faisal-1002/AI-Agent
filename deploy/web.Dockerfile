@@ -1,4 +1,4 @@
-# seyl-ai "web" image: the React UI as static files, served by nginx.
+# Ai-Agent "web" image: the React UI as static files, served by nginx.
 # Multi-stage: stage 1 builds with Node, stage 2 ships only the output (no Node, no source).
 
 FROM node:24-slim AS build

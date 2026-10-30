@@ -1,12 +1,12 @@
-# Postgres with pgvector: the gateway's keys and logs (database "litellm"), and seyl-ai's
-# documents and their vectors (database "seyl", own user — created by npm run db:setup).
+# Postgres with pgvector: the gateway's keys and logs (database "litellm"), and Ai-Agent's
+# documents and their vectors (database "ai_agent", own user — created by npm run db:setup).
 # One replica with a persistent volume — a real deployment would use a managed
 # database instead (on AWS: Amazon RDS / Aurora).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: gateway-db
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -17,7 +17,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: db
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   replicas: 1
   strategy:
@@ -38,7 +38,7 @@ spec:
               value: litellm
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: { name: seyl-secrets, key: POSTGRES_PASSWORD }
+                secretKeyRef: { name: ai-agent-secrets, key: POSTGRES_PASSWORD }
             - name: PGDATA # a subfolder: the volume's root may contain lost+found
               value: /var/lib/postgresql/data/pgdata
           ports:
@@ -62,7 +62,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: db
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   selector: { app: db }
   ports:

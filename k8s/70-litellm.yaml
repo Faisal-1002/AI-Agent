@@ -1,12 +1,12 @@
 # The LiteLLM gateway: the only way anything in the cluster reaches a model.
 # Stateless (keys and logs live in Postgres), so it could run several replicas.
 # Not exposed outside the cluster. Admin UI / key setup:
-#   kubectl -n seyl-ai port-forward svc/litellm 4001:4000   →  http://localhost:4001/ui
+#   kubectl -n ai-agent port-forward svc/litellm 4001:4000   →  http://localhost:4001/ui
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: litellm
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   replicas: 1
   selector:
@@ -17,18 +17,18 @@ spec:
     spec:
       containers:
         - name: litellm
-          image: seyl-ai/gateway:dev # LiteLLM + gateway/config.yaml
+          image: ai-agent/gateway:dev # LiteLLM + gateway/config.yaml
           imagePullPolicy: IfNotPresent
           env:
             - name: LITELLM_MASTER_KEY
               valueFrom:
-                secretKeyRef: { name: seyl-secrets, key: LITELLM_MASTER_KEY }
+                secretKeyRef: { name: ai-agent-secrets, key: LITELLM_MASTER_KEY }
             - name: LITELLM_SALT_KEY
               valueFrom:
-                secretKeyRef: { name: seyl-secrets, key: LITELLM_SALT_KEY }
+                secretKeyRef: { name: ai-agent-secrets, key: LITELLM_SALT_KEY }
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: { name: seyl-secrets, key: POSTGRES_PASSWORD }
+                secretKeyRef: { name: ai-agent-secrets, key: POSTGRES_PASSWORD }
             # $(VAR) = Kubernetes inserts an env var defined above.
             - name: DATABASE_URL
               value: postgresql://litellm:$(POSTGRES_PASSWORD)@db:5432/litellm
@@ -59,7 +59,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: litellm
-  namespace: seyl-ai
+  namespace: ai-agent
 spec:
   selector: { app: litellm }
   ports:

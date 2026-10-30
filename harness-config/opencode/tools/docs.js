@@ -1,4 +1,4 @@
-// seyl-ai's document tools for the agent: docs_search_documents, docs_list_documents,
+// Ai-Agent's document tools for the agent: docs_search_documents, docs_list_documents,
 // docs_read_document (OpenCode names custom tools <file>_<export>).
 //
 // OpenCode loads this file as "custom tools" from its config folder (XDG_CONFIG_HOME/opencode/tools;
@@ -12,8 +12,8 @@
 // installed there.) Arguments are written as JSON Schema (OpenCode's legacy form, where every
 // argument is required); OpenCode doesn't validate them, so the api does.
 
-const URL = process.env.SEYL_DOCS_URL ?? "http://127.0.0.1:3001/internal/docs";
-const TOKEN = process.env.SEYL_MCP_TOKEN ?? "";
+const URL = process.env.AI_AGENT_DOCS_URL ?? "http://127.0.0.1:3001/internal/docs";
+const TOKEN = process.env.AI_AGENT_MCP_TOKEN ?? "";
 
 async function call(op, args, context) {
   const res = await fetch(`${URL}/${op}`, {

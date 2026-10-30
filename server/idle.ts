@@ -5,15 +5,15 @@ import { client } from "./opencode.js";
 // model catalog, …) and never closes one by itself — with a folder per user, the harness would
 // grow with every user who ever opened a conversation. The api notes when it last used each
 // folder (table harness_folders); every few minutes one api pod closes the folders nobody has
-// used for SEYL_IDLE_MINUTES. Nothing is lost: conversations live in OpenCode's database, and the
+// used for AI_AGENT_IDLE_MINUTES. Nothing is lost: conversations live in OpenCode's database, and the
 // next request opens the folder again (a second or two).
 //
 // OpenCode has no list of open folders, and closing one opens it first — so only folders used
 // since they were last closed are candidates. Never closed: a folder whose agent is working, or
 // that waits for an approval (closing it would reject the request).
 
-const IDLE_MINUTES = Number(process.env.SEYL_IDLE_MINUTES ?? 30);
-const CHECK_SECONDS = Number(process.env.SEYL_IDLE_CHECK_SECONDS ?? 300);
+const IDLE_MINUTES = Number(process.env.AI_AGENT_IDLE_MINUTES ?? 30);
+const CHECK_SECONDS = Number(process.env.AI_AGENT_IDLE_CHECK_SECONDS ?? 300);
 const IDLE_MS = IDLE_MINUTES * 60_000;
 // How often an open chat says "still in use" — well within the idle limit, whatever it is.
 export const KEEP_OPEN_MS = Math.max(5_000, Math.min(120_000, IDLE_MS / 3));
@@ -70,7 +70,7 @@ async function closeIdleFolders() {
 }
 
 export function startIdleCleanup() {
-  if (!(IDLE_MINUTES > 0)) return console.log("[idle] closing idle folders is off (SEYL_IDLE_MINUTES=0)");
+  if (!(IDLE_MINUTES > 0)) return console.log("[idle] closing idle folders is off (AI_AGENT_IDLE_MINUTES=0)");
   setInterval(() => void closeIdleFolders().catch((err: Error) => console.error(`[idle] ${err.message}`)), CHECK_SECONDS * 1000).unref();
   console.log(`[idle] closing folders unused for ${IDLE_MINUTES} min (checked every ${CHECK_SECONDS} s)`);
 }

@@ -25,7 +25,7 @@ export function useChat(conversationId: string | undefined, handlers: Handlers) 
     stream.current = { id, source, openedBySend };
 
     return new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Timed out connecting to seyl-ai")), 10_000);
+      const timeout = setTimeout(() => reject(new Error("Timed out connecting to Ai-Agent")), 10_000);
       source.onmessage = (e) => {
         const event = JSON.parse(e.data) as ChatEvent;
         if (event.type === "ready") {
