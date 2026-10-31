@@ -50,6 +50,17 @@ model_list:
     model_info:
       mode: embedding
 
+  # Reranker — Qwen3-Reranker on Ollama (GPU, ~0.9 GB next to the main model): reads a search hit
+  # next to the question and answers "yes" or "no"; the backend orders hits by P(yes) (server/documents.ts).
+  - model_name: qwen3-reranker
+    litellm_params:
+      model: openai/ai-agent-qwen3-reranker-0.6b
+      api_base: os.environ/OLLAMA_API_BASE
+      extra_body: { keep_alive: 1h }
+      api_key: ollama
+    model_info:
+      mode: chat
+
   # Speech-to-text — our voice/asr service (OpenAI /v1/audio/transcriptions).
   - model_name: qwen3-asr
     litellm_params:

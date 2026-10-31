@@ -15,3 +15,6 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Eval results (npm run rag:eval --label …): local measurements, not source
+evals/results/

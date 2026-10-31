@@ -5,8 +5,9 @@ import { LLM_GATEWAY_URL } from "./opencode.js";
 // someone opens the app after a long pause, load the models while they're still typing.
 
 const API_KEY = process.env.LITELLM_KEY_API;
-// The models on the path of every message: the safety filter first, then the chat model.
-const MODELS = ["qwen3-guard", "qwen3.5-9b"];
+// The models on the path of every message: the safety filter first, then the chat model — and the
+// reranker, which every document search uses.
+const MODELS = ["qwen3-guard", "qwen3.5-9b", "qwen3-reranker"];
 const IDLE = 50 * 60_000; // a bit less than keep_alive, so we warm up before they're unloaded
 
 let lastUse = 0;

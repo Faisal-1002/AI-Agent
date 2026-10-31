@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Falak Workbench Release Notes</title>
+<style>
+  body { font-family: sans-serif; max-width: 760px; margin: 2rem auto; line-height: 1.5; color: #222; }
+  h2 { border-bottom: 1px solid #ccc; padding-bottom: 0.2rem; }
+  .date { color: #666; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<h1>Falak Workbench Release Notes</h1>
+<p>This page lists the changes in each Falak Workbench release from version 4.0 onwards, newest first. Releases are rolled out to all tenants over about one week, starting with the internal tier and ending with the bronze tier. Bug references use FALK tracker numbers.</p>
+
+<h2 id="v4-6">Version 4.6</h2>
+<p class="date">Released 18 March 2026</p>
+<ul>
+  <li>The export row limit has been raised from 50,000 to 100,000 rows. Exports above the new limit still return error FS-E-2207.</li>
+  <li>Smart prefetch loads the next page of a planning board in the background. It is being enabled gradually for each tier.</li>
+  <li>Improved right-to-left layout for Arabic planning boards, including mirrored charts and correctly aligned number columns.</li>
+  <li>The legacy CSV export is deprecated and will be removed in 4.7. Please switch to the TSV or JSON Lines export.</li>
+  <li>Fixed FALK-3502: the delivery ETA column showed the previous day's value just after midnight for some tenants.</li>
+</ul>
+
+<h2 id="v4-5">Version 4.5</h2>
+<p class="date">Released 3 December 2025</p>
+<ul>
+  <li>Tenant isolation (beta): gold and internal tenants can run sync jobs in isolated worker pools, so a heavy job from one tenant no longer slows down others. The feature is controlled by a flag in qamar-sync and is being rolled out in stages.</li>
+  <li>Strict schema validation for incoming order records. Records that fail validation are sent to the dead-letter queue with a reason code instead of being dropped.</li>
+  <li>New audit log view for administrators, with filters by user, board and action type.</li>
+  <li>Fixed FALK-3440: stock totals double-counted transfers between two warehouses made on the same day.</li>
+</ul>
+
+<h2 id="v4-4">Version 4.4</h2>
+<p class="date">Released 15 September 2025</p>
+<ul>
+  <li>Fixed FALK-3318: duplicate sync events were created when parallel fan-out was enabled and an upstream timed out.</li>
+  <li>Fixed FALK-3290: saved filters were lost after a planning board was renamed.</li>
+  <li>Reorder suggestions now respect the reorder level set for each warehouse instead of a single company-wide value.</li>
+  <li>Boards with more than 2,000 items load noticeably faster thanks to a new virtualised grid.</li>
+</ul>
+
+<h2 id="v4-3">Version 4.3</h2>
+<p class="date">Released 21 July 2025</p>
+<ul>
+  <li>Delta compaction in qamar-sync merges repeated updates to the same record, which cuts sync traffic for large tenants by roughly a third.</li>
+  <li>Parallel fan-out to upstream services is available as an opt-in setting. Known issue: under timeouts it can create duplicate events.</li>
+  <li>New keyboard shortcuts for moving cards between planning board columns.</li>
+  <li>Fixed FALK-3207: the stock chart legend overlapped the axis labels on narrow screens.</li>
+</ul>
+
+<h2 id="v4-2">Version 4.2</h2>
+<p class="date">Released 28 May 2025</p>
+<ul>
+  <li>Bulk export of planning boards. Exports are limited to 50,000 rows; larger requests fail with error FS-E-2207 and a message suggesting a narrower filter.</li>
+  <li>Board owners can now share a read-only view with colleagues who do not have an editor licence.</li>
+  <li>Fixed FALK-3125: the warehouse picker did not show newly added warehouses until the page was reloaded.</li>
+</ul>
+
+<h2 id="v4-1">Version 4.1</h2>
+<p class="date">Released 9 April 2025</p>
+<ul>
+  <li>Arabic interface available as a beta language, selectable in personal settings.</li>
+  <li>Scheduled reports can be delivered to the in-app inbox every day, week or month.</li>
+  <li>Fixed FALK-3011: reorder alerts were sent twice when a stock level changed during an import.</li>
+</ul>
+
+<h2 id="v4-0">Version 4.0</h2>
+<p class="date">Released 12 February 2025</p>
+<ul>
+  <li>New planning board engine; typical boards load up to three times faster than in 3.x.</li>
+  <li>API v1 has been removed. All integrations must use API v2, which has been available since 3.8.</li>
+  <li>Single sign-on is now available on every tier, not only gold.</li>
+  <li>Customer plans were reorganised into bronze, silver and gold tiers, each with its own request limits.</li>
+</ul>
+
+<h2 id="upgrade">Upgrade notes</h2>
+<p>Workbench is a hosted product, so customers do not install releases themselves. Administrators can preview each release in a sandbox tenant for five days before it reaches their production tenant. Breaking changes, such as the removal of API v1 in 4.0, are announced at least two releases in advance on this page and in the administrator console.</p>
+
+<p>For questions about a release, contact the Workbench product team through the support portal.</p>
+</body>
+</html>

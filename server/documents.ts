@@ -139,9 +139,119 @@ async function indexDocument(id: string, type: string, bytes: Uint8Array) {
 
 // ── Search & read (used by the docs tools) ───────────────────────────────────
 
-export type SearchHit = { document: string; position: number; score: number; content: string };
+// reranked: the score is the reranker's P(yes) ("does this passage answer the question?");
+// otherwise it's the vector similarity (reranking off, or it failed).
+export type SearchHit = { document: string; position: number; score: number; content: string; reranked?: boolean };
+
+// Search in two steps (npm run rag:eval measures both; numbers in the README, "Documents"):
+//   1. find — the passages closest in MEANING to the question (its embedding vs. theirs): fast,
+//      but it compares two summaries, so the best passage is often 2nd or 6th, not 1st;
+//   2. rerank — Qwen3-Reranker reads each candidate next to the question and answers "does this
+//      passage answer it?"; the probability of "yes" orders them, and becomes the score shown.
+// If the reranker fails or is slow, search still answers, in step 1's order (and says so).
+const RERANK = process.env.AI_AGENT_RERANK !== "off";
+const RERANK_URL = process.env.AI_AGENT_RERANK_URL ?? `${LLM_GATEWAY_URL}/v1`;
+const RERANK_MODEL = process.env.AI_AGENT_RERANK_MODEL ?? "qwen3-reranker";
+const RERANK_CANDIDATES = positiveInt(process.env.AI_AGENT_RERANK_CANDIDATES, 30, 100);
+const RERANK_TIMEOUT_MS = positiveInt(process.env.AI_AGENT_RERANK_TIMEOUT_MS, 10_000, 120_000); // the whole rerank
+// Requests in flight: keeps Ollama's queue full. Ollama itself runs them one at a time (~30 ms each
+// on the GPU); don't raise OLLAMA_NUM_PARALLEL for this — it also multiplies the 9B's context memory.
+const RERANK_PARALLEL = 4;
+const RERANK_INSTRUCTION = "Given a question about the user's documents, judge whether the passage answers it";
+
+function positiveInt(value: string | undefined, fallback: number, max: number): number {
+  const n = Number.parseInt(value ?? "", 10);
+  return Number.isInteger(n) && n > 0 ? Math.min(n, max) : fallback;
+}
+
+// How many searches were reranked, and how many fell back to the search order (the eval checks it).
+export const rerankStats = { reranked: 0, fallbacks: 0 };
+
+type TopLogprob = { token: string; logprob: number };
+
+// P(yes) from the first answer token's alternatives, "yes" vs "no" in any case or spacing;
+// undefined when neither word is among them (the reply wasn't a yes/no answer).
+export function yesProbability(top: TopLogprob[]): number | undefined {
+  const p = (word: string) => top.filter((t) => t.token.trim().toLowerCase() === word).reduce((sum, t) => sum + Math.exp(t.logprob), 0);
+  const yes = p("yes");
+  const no = p("no");
+  return yes + no > 0 ? yes / (yes + no) : undefined;
+}
+
+// Document text goes into the reranker's prompt: take out what could pose as the prompt's own
+// structure (chat-template tokens like <|im_end|>, and the <Instruct>/<Query>/<Document> labels), so
+// a passage can't write itself a "yes". It still only moves passages in the ranking.
+export const forReranker = (text: string) => text.replace(/<\|[^|>]*\|>/g, " ").replace(/<\s*(instruct|query|document)\s*>\s*:/gi, "$1:");
+
+async function relevance(query: string, passage: string, signal: AbortSignal): Promise<number> {
+  const res = await fetch(`${RERANK_URL}/chat/completions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${API_KEY}`, "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({
+      model: RERANK_MODEL,
+      // Qwen3-Reranker's own prompt format. reasoning_effort "none" matters: without it Ollama lets
+      // the model "think" first, and the first token isn't yes/no (ollama/qwen3-reranker-0.6b.Modelfile).
+      messages: [
+        { role: "system", content: 'Judge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be "yes" or "no".' },
+        { role: "user", content: `<Instruct>: ${RERANK_INSTRUCTION}\n<Query>: ${forReranker(query)}\n<Document>: ${forReranker(passage)}` },
+      ],
+      max_tokens: 1,
+      temperature: 0,
+      logprobs: true,
+      top_logprobs: 10,
+      reasoning_effort: "none",
+    }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const body = (await res.json()) as { choices: { logprobs?: { content?: { top_logprobs: TopLogprob[] }[] } }[] };
+  const score = yesProbability(body.choices[0]?.logprobs?.content?.[0]?.top_logprobs ?? []);
+  if (score === undefined) throw new Error(`${RERANK_MODEL} didn't answer yes or no (no token probabilities?)`);
+  return score;
+}
+
+// All or nothing: the first failure (or the deadline) stops the rest, and search falls back.
+async function rerank(query: string, hits: SearchHit[], limit: number): Promise<SearchHit[]> {
+  const stop = new AbortController();
+  const signal = AbortSignal.any([stop.signal, AbortSignal.timeout(RERANK_TIMEOUT_MS)]);
+  const scores = new Array<number>(hits.length);
+  let next = 0;
+  try {
+    await Promise.all(
+      Array.from({ length: Math.min(RERANK_PARALLEL, hits.length) }, async () => {
+        while (next < hits.length && !signal.aborted) {
+          const i = next++;
+          scores[i] = await relevance(query, hits[i].content, signal);
+        }
+      }),
+    );
+  } catch (err) {
+    stop.abort();
+    throw signal.reason instanceof DOMException && signal.reason.name === "TimeoutError" ? new Error(`took over ${RERANK_TIMEOUT_MS} ms`) : err;
+  }
+  return hits
+    .map((hit, i) => ({ ...hit, score: scores[i], reranked: true, i }))
+    .sort((a, b) => b.score - a.score || a.i - b.i) // ties keep the search's own order
+    .slice(0, limit)
+    .map(({ i, ...hit }) => hit);
+}
 
 export async function searchDocuments(query: string, space: string, limit = 5): Promise<SearchHit[]> {
+  if (!RERANK) return findPassages(query, space, limit);
+  const candidates = await findPassages(query, space, Math.max(limit, RERANK_CANDIDATES));
+  if (candidates.length <= 1) return candidates;
+  try {
+    const hits = await rerank(query, candidates, limit);
+    rerankStats.reranked++;
+    return hits;
+  } catch (err) {
+    rerankStats.fallbacks++;
+    console.warn(`[documents] reranking failed, using the search order: ${(err as Error).message}`);
+    return candidates.slice(0, limit);
+  }
+}
+
+async function findPassages(query: string, space: string, limit: number): Promise<SearchHit[]> {
   const [vector] = await embed([QUERY_INSTRUCTION + query]);
   // <=> is pgvector's cosine distance; 1 − distance = similarity (higher is closer).
   // The HNSW index finds the nearest passages of EVERYONE first and filters by space after: with

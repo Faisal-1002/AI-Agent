@@ -1,0 +1,294 @@
+FALAK SOFTWARE EMPLOYEE HANDBOOK
+
+Edition 6.2, issued by the People Team. This edition applies to all employees from 1 March 2026 and replaces edition 6.1.
+
+CONTENTS
+
+1. Welcome to Falak Software
+2. Our Values
+3. How This Handbook Works
+4. Working Hours and Core Hours
+5. Hybrid and Remote Work
+6. Onboarding and the Sanad Programme
+7. Probation
+8. Annual Leave
+9. Sick Leave
+10. Public Holidays and Office Closures
+11. Parental and Family Leave
+12. Performance Reviews
+13. Pay, Grades and Bonuses
+14. Learning and Development
+15. Equipment and Workplace Technology
+16. Information Security
+17. Business Travel
+18. On-Call and Incident Response
+19. Code of Conduct
+20. Conflicts of Interest and Outside Work
+21. Internal Mobility
+22. Employee Referral Programme
+23. Wellbeing and Quiet Time
+24. Resignation, Notice Periods and Offboarding
+25. Glossary
+
+
+1. WELCOME TO FALAK SOFTWARE
+
+Falak Software builds planning and data tools for logistics and retail teams across the region. We started in 2014 as a group of six engineers working from a rented room above a print shop in Qalamar, and today we are a little over four hundred people spread across three offices and many home desks. Our flagship product, Falak Workbench, is used by planners who need to see stock, orders and deliveries in one place. Our internal platform team runs the services that keep Workbench fast and reliable, including the qamar-sync service that moves data between customer systems and our own.
+
+This handbook explains how we work together. It describes what you can expect from Falak and what Falak expects from you. It is written for everyone: engineers, designers, sales, support, finance and operations. When a rule only applies to one group, the section says so. If something here is unclear, ask your manager or your People Partner. We would rather answer a question early than fix a misunderstanding later.
+
+Our offices are in Qalamar North, Sadeem Central and the smaller Wadi Saraab hub. Each office has a site lead who looks after the building, the shared spaces and the local calendar of events. The site lead is also the first person to talk to about desks, lockers, meeting rooms and visitor badges.
+
+
+2. OUR VALUES
+
+We have four values, and we use them when we hire, when we review performance and when we make hard decisions.
+
+Clarity over cleverness. We write plainly, we name things honestly and we explain our reasoning. A simple design that the whole team understands beats a clever one that only its author can maintain.
+
+Ownership. When you pick up a piece of work, you see it through to the end, including the less exciting parts such as documentation, tests and handover notes. If you cannot finish something, you say so early and help find a new owner.
+
+Respect for the customer's time. Our customers are busy planners with deadlines. Every screen, report and support reply should save them time, not cost them time.
+
+Steady improvement. We prefer many small, safe changes to rare large ones. We review what went wrong without blame and we write down what we learned so the next person does not repeat the mistake.
+
+
+3. HOW THIS HANDBOOK WORKS
+
+The handbook is owned by Omar, Head of People, and is reviewed twice a year with input from the Employee Forum. Changes are announced in the company news channel at least two weeks before they take effect, except where a change is required by law. The current edition is always the one published on the People pages of the intranet; printed copies may be out of date.
+
+Some topics are covered in more detail by separate policies. Travel and expense limits are set by the Falak Software Expense Policy that is in force at the time the cost is incurred, and the handbook deliberately does not repeat those amounts. Information security rules are expanded in the Acceptable Use Standard. Where this handbook and a specific policy disagree, the specific policy wins.
+
+Nothing in this handbook forms part of your employment contract unless your contract says so. Your contract, together with applicable labour law, always takes priority.
+
+
+4. WORKING HOURS AND CORE HOURS
+
+The standard working week at Falak is 40 hours, Sunday to Thursday. We use flexible hours: you can start any time between 7:00 and 10:00 and finish once you have completed your day, as long as you are available during core hours. Core hours are 10:00 to 14:30, and most recurring meetings should be scheduled inside that window so that early starters and late starters can both attend.
+
+Customer support and operations teams work on rotas that may include evenings or weekends. Their rota rules, including shift swaps and overtime, are agreed with each team and published by the team lead at least four weeks in advance.
+
+Overtime for engineers is not expected as a normal part of the job. If a project regularly needs more than the standard week, raise it with your manager so that the plan or the staffing can change. Time spent on scheduled on-call duty is handled separately and is described in the On-Call and Incident Response section later in this handbook.
+
+
+5. HYBRID AND REMOTE WORK
+
+Most roles at Falak are hybrid. Hybrid employees spend at least two days a week in their home office, which is one of Qalamar North, Sadeem Central or Wadi Saraab. Teams choose their shared office days together so that people who come in actually meet each other. A small number of roles are fully remote; those are marked in the contract and still include an in-person team week twice a year.
+
+You may work from another city for up to 20 working days in a calendar year, provided your manager agrees and you remain within the country. Working from abroad needs approval from both your manager and the People Team because of tax and data rules, and it is limited to 10 working days a year.
+
+Employees on a hybrid or remote contract may claim a home office allowance under the Expense Policy. Please do not buy furniture or equipment and expect reimbursement without checking the current limits first.
+
+
+6. ONBOARDING AND THE SANAD PROGRAMME
+
+Your first weeks at Falak follow a structured plan prepared by your manager before you arrive. On day one you receive your laptop, your accounts and a short welcome session with the People Team. During week one you meet the leaders of the teams you will work with most and you complete the mandatory security and conduct training.
+
+Every new joiner is paired with a Sanad buddy: an experienced colleague from a different team who meets you every week during your first 8 weeks. Your Sanad buddy is not your manager and does not assess your performance. Their job is to answer the questions you might not want to ask your manager, explain how things really get done and introduce you to people across the company. Buddies volunteer for the role and receive a short training session before they are matched.
+
+By the end of your first month you should have a written 90-day plan agreed with your manager. The plan lists three to five outcomes, the people who can help you reach them and how you will both know they have been achieved.
+
+
+7. PROBATION
+
+New employees serve a probation period of 120 days. During probation either side can end the employment with 14 days' notice. Your manager holds a formal check-in at the midpoint and a probation review before the period ends. The review covers how well you have met the outcomes in your 90-day plan, how you work with others and how you live the Falak values.
+
+If more time is needed to make a fair decision, probation can be extended once by up to 60 days. An extension must be agreed in writing with the People Team, and you must receive a clear list of what needs to improve. Probation cannot be extended simply because a manager has not had time to complete the review.
+
+Once you pass probation you receive a confirmation letter, and from that date the standard notice periods in the Resignation section apply.
+
+
+8. ANNUAL LEAVE
+
+Full-time employees receive 25 working days of paid annual leave per year, rising to 28 days after five years of continuous service. Part-time employees receive a pro-rated amount based on their contracted hours. The leave year runs from 1 January to 31 December.
+
+Please book leave in the HR portal at least two weeks in advance for absences of three days or more, so that your team can plan cover. Requests for more than ten consecutive working days need approval from your manager's manager as well.
+
+You can carry over up to 5 unused days into the next leave year. Carried-over days must be used by 31 March or they are lost. In exceptional cases, such as a long project freeze requested by the company, the People Team may allow a larger carry-over; this must be agreed in writing before the end of the year.
+
+We encourage everyone to take at least one break of a full working week each year. Rest is part of doing good work, not a reward for it.
+
+
+9. SICK LEAVE
+
+If you are unwell, tell your manager as early as possible on the first day of absence, using whatever channel your team has agreed. You do not need to give medical details. For absences longer than two consecutive working days, please upload a doctor's note to the HR portal.
+
+Falak pays full salary for the first 30 days of sick leave in a rolling twelve-month period, and three quarters of salary for the following 60 days. Longer absences are handled case by case with the People Team, in line with labour law.
+
+When you return after an absence of more than two weeks, your manager will arrange a short return-to-work conversation to agree any temporary adjustments, such as a lighter workload or more home working for a period. These conversations are supportive, not disciplinary.
+
+
+10. PUBLIC HOLIDAYS AND OFFICE CLOSURES
+
+Falak observes all official public holidays. The exact dates for the coming year are published on the People pages each December. If you are required to work on a public holiday, for example as part of a support rota, you receive a replacement day off to be taken within three months.
+
+In addition to public holidays, all offices close for a company rest day on the last working day of the year. Teams that must stay available on that day, such as customer support, agree a reduced rota in advance, and the people on that rota receive a replacement day.
+
+Office closures caused by severe weather or building maintenance are announced in the company news channel. On those days everyone works from home unless their manager has agreed otherwise.
+
+
+11. PARENTAL AND FAMILY LEAVE
+
+Birth mothers receive 14 weeks of fully paid maternity leave. The other parent receives 15 working days of fully paid parental leave, which can be taken in one block or split into up to three blocks within six months of the birth or adoption. Adoptive parents receive the same entitlements as birth parents, with the primary carer receiving the 14 weeks.
+
+Employees returning from maternity leave can work a reduced schedule of 80 percent of their hours at full pay for the first four weeks back. We also offer up to 5 days of paid family care leave per year for looking after a dependant who is ill, and up to 3 days of bereavement leave on the loss of a close family member.
+
+Requests for parental leave should be made in the HR portal at least eight weeks before the expected start date, or as soon as possible for adoptions, where dates are often less predictable.
+
+
+12. PERFORMANCE REVIEWS
+
+Performance at Falak is reviewed twice a year, in a mid-year conversation in June and a full review in December. Before each review you write a short self-assessment and ask two or three colleagues for written feedback through the HR portal. Your manager combines this with their own view and with evidence from your work.
+
+The December review ends with one of four ratings: Exceeding, Strong, Developing or Not Yet Meeting. Ratings are checked in a calibration session across each department so that the same standard applies everywhere. Your rating affects your bonus and is one input, but not the only input, into promotion decisions.
+
+If you disagree with your rating, you can ask for a second review by your manager's manager within 15 working days of receiving it. The second reviewer reads the evidence again and meets you before making a final decision.
+
+
+13. PAY, GRADES AND BONUSES
+
+Every role at Falak sits in one of eight grades, from F1 for entry-level roles to F8 for the executive team. Each grade has a published salary range, and salary ranges are reviewed every January against market data. You can see the range for your own grade in the HR portal.
+
+Salaries are paid on the 25th day of each month. When the 25th falls on a weekend or public holiday, pay is moved to the previous working day.
+
+The annual bonus is based on company results and on your December rating. The target bonus is 8 percent of base salary for grades F1 to F4 and 12 percent for grades F5 and above. Bonuses are paid with March salary. Employees who join after 1 October are not eligible for that year's bonus, and employees who are serving notice on the payment date do not receive it.
+
+Promotions are decided twice a year, alongside the review cycle. A promotion to a new grade comes with a salary increase of at least 7 percent or the minimum of the new range, whichever is higher.
+
+
+14. LEARNING AND DEVELOPMENT
+
+Each employee has four learning days per year to spend on courses, workshops, conferences or self-study. Learning days are booked like annual leave but do not reduce your leave balance. Unused learning days do not carry over.
+
+The money for courses and conference tickets comes from the training budget set in the current Expense Policy. Requests are approved by your manager, who checks that the activity is relevant to your current role or to a role you are working towards.
+
+Falak also runs an internal academy. Senior colleagues teach short courses on topics such as writing design documents, running incidents and negotiating with customers. Teaching a full academy course counts as a strong contribution in your performance review.
+
+If you want to pursue a longer qualification, such as a part-time degree, you can apply for study support. Approved study support covers up to half of tuition fees and up to 10 days of paid study leave per year. Employees who leave within 12 months of receiving study support repay a share of the fees.
+
+
+15. EQUIPMENT AND WORKPLACE TECHNOLOGY
+
+You receive a laptop configured by the IT team on your first day. Engineers usually receive a 14-inch developer laptop with 32GB of memory; other roles receive a lighter model. Laptops are refreshed every 36 months, or earlier if a repair would cost more than half the price of a new device. Monitors, docks, keyboards and headsets for the office are ordered from the IT catalogue and delivered from the nearest warehouse.
+
+All company devices are managed centrally. Do not remove management software, disable disk encryption or install tools that the IT catalogue lists as blocked. If you need software that is not in the catalogue, open a request with the IT team; most requests are answered within two working days.
+
+When you leave Falak, or when your device is refreshed, you return the old device to IT. Devices are wiped and either reused internally or recycled through an approved partner. You may not keep a company device, even an old one, without written approval from IT.
+
+
+16. INFORMATION SECURITY
+
+Security is everyone's job. Every employee completes security training during the first week and a refresher every year. Engineers complete an additional secure development module.
+
+Use the company password manager for all work accounts, and turn on hardware security keys wherever the system supports them. Never share your passwords, keys or access tokens with anyone, including colleagues and IT staff. IT will never ask you for your password.
+
+If you lose a laptop, phone or security key, or think it may have been stolen, report it to the Security Desk within 2 hours of noticing, even outside working hours. The Security Desk can lock and wipe the device remotely, and quick reporting is far more important than having all the details.
+
+Customer data stays in approved systems. Do not copy customer data to personal devices, personal cloud storage or unapproved AI tools. If a customer asks you to receive data in a way that is not approved, explain that you need to check with the Security Desk first.
+
+Report suspicious messages using the report button in the mail client. You will never be punished for reporting something that turns out to be harmless.
+
+
+17. BUSINESS TRAVEL
+
+Business trips must have a clear purpose, such as a customer workshop, an implementation visit or a conference you have been approved to attend. Ask your manager before you book anything, and book flights and hotels through the Travel Desk in the Falak portal so that the company knows where travellers are.
+
+Limits for hotels, flights, meals and local transport are set in the Expense Policy that is in force on the date of travel. The handbook does not repeat those numbers because they change from year to year, and an old printed copy could mislead you. Always check the current edition before you travel.
+
+Travel time on a working day counts as working time. If a trip requires you to travel on a weekend, you may take the same amount of time off within the following two weeks, agreed with your manager. Please keep travel to a reasonable level: where a video call will do, use a video call.
+
+
+18. ON-CALL AND INCIDENT RESPONSE
+
+Engineers in product and platform teams take part in an on-call rota once they have passed probation and completed the incident training course. A typical rotation is one week in every six. While on call you must be able to reach a laptop and a reliable connection within a short time, so please plan travel and personal commitments accordingly.
+
+Each week of scheduled on-call duty is paid with an on-call stipend of 400 SAR, whether or not you are paged. The stipend is added to the next monthly salary. If you swap a shift with a colleague, the stipend follows whoever actually covered the week, so please record every swap in the rota tool.
+
+When you are paged, the severity of the incident determines how quickly you must respond. A Sev-1 incident, meaning a full outage or data at risk for many customers, must be acknowledged within 15 minutes. A Sev-2 incident, meaning a serious problem for some customers with a workaround available, must be acknowledged within 60 minutes. Sev-3 issues are handled in normal working hours.
+
+If an incident keeps you working for more than 4 hours on a weekend or public holiday, you receive a compensatory day off, to be taken within the following month. Every Sev-1 and Sev-2 incident is followed by a blameless review within ten working days, led by the incident commander.
+
+The incident commander is chosen at the start of each Sev-1 or Sev-2 incident. Their job is to coordinate, not to fix: they assign tasks, keep a written timeline and send status updates to the support team every 30 minutes until the incident is resolved.
+
+
+19. CODE OF CONDUCT
+
+We expect everyone at Falak to treat colleagues, customers and partners with respect. Harassment, discrimination and bullying are not tolerated in any form, in the office, online or at company events. This applies to behaviour towards anyone, regardless of their role or seniority.
+
+Be honest in what you say and write. Do not misrepresent the capabilities of our products to customers, and do not promise features or dates that have not been agreed by the product team. If you make a mistake, say so early; we treat honest mistakes very differently from attempts to hide them.
+
+If you see behaviour that breaks this code, you can raise it with your manager, with your People Partner or through the confidential reporting channel run by an independent provider. Reports can be made anonymously. Retaliation against anyone who raises a concern in good faith is itself a serious breach of this code.
+
+
+20. CONFLICTS OF INTEREST AND OUTSIDE WORK
+
+You must tell your manager and the People Team about any situation where your personal interests could conflict with your work for Falak. Examples include a close relative working for a supplier or competitor, a financial interest in a customer, or being asked to help choose a vendor that a friend owns.
+
+Outside work is allowed as long as it does not compete with Falak, does not use company time, equipment or information, and does not affect your performance. Paid outside work, including freelance development, must be declared in the HR portal before you start it. Unpaid open-source contributions in your own time do not need to be declared unless they relate directly to Falak products.
+
+Gifts from customers or suppliers are covered by the Gifts and Hospitality Standard. As a simple rule, if you would be uncomfortable telling your manager about a gift, do not accept it.
+
+
+21. INTERNAL MOBILITY
+
+We want people to grow at Falak, and moving to a new team is often the best way to do that. Open roles are posted on the internal jobs board for at least five working days before they are advertised externally.
+
+To apply for an internal transfer, you must have been in your current role for at least 14 months and your most recent rating must be Strong or Exceeding. You should tell your current manager before you apply; managers are expected to support moves and may not block an application. If you are selected, your current and new managers agree a handover date, which is normally no more than 6 weeks after the offer.
+
+Internal candidates are interviewed with the same process as external candidates, but the hiring manager also reads your last two performance reviews. If you are not selected, the hiring manager gives you feedback in a short conversation within ten working days.
+
+Short-term secondments of up to three months are also possible. A secondment does not need the full transfer process, but it does need the agreement of both managers and a written plan that says what you will work on and when you will return.
+
+
+22. EMPLOYEE REFERRAL PROGRAMME
+
+The best people often come from recommendations. If you refer someone who is hired, you receive a referral bonus once the new employee has passed probation. The standard referral bonus is 3,000 SAR. For roles in grade F5 and above the referral bonus is 5,000 SAR, and the same higher amount applies to any role on the hard-to-fill list published by the Talent team.
+
+To qualify, submit the referral through the referral form before the candidate applies directly, and make sure you know the person well enough to describe their work. Managers cannot receive a referral bonus for people who will report directly to them, and members of the Talent team are not eligible for the programme.
+
+There is no limit to the number of referrals you can make. Each quarter the People Team publishes the number of hires that came through referrals, without naming the referrers unless they agree.
+
+
+23. WELLBEING AND QUIET TIME
+
+Falak offers every employee private health insurance, an annual health check and access to a confidential counselling service. Details of each benefit are in the Benefits Guide on the People pages.
+
+To protect focus time, we observe Quiet Thursday afternoons: no internal meetings are scheduled after 13:00 on Thursdays, except for incident response and customer meetings that cannot move. Many teams also keep one meeting-free morning each week.
+
+Each office has a quiet room for prayer and reflection, and a wellbeing room that anyone can book for a short rest. During Ramadan, core hours are shortened to 10:00 to 13:00 and the standard working day is reduced in line with labour law.
+
+People who want to talk to someone about stress at work can ask the People Team for a wellbeing conversation. These conversations are confidential and are not recorded in your personnel file.
+
+
+24. RESIGNATION, NOTICE PERIODS AND OFFBOARDING
+
+If you decide to leave Falak, tell your manager first and then confirm your resignation in writing through the HR portal. Your notice period starts on the day after the written resignation is received.
+
+After probation, the notice period is 30 days for employees in grades F1 to F4 and 60 days for employees in grades F5 and above. Falak gives the same notice if it ends your employment, except in cases of gross misconduct. Your manager and the People Team may agree a shorter notice period if the handover allows it, but you cannot shorten it on your own.
+
+During your notice period you are expected to hand over your work properly. Your manager will agree a handover plan with you in the first week of notice. Unused annual leave is either taken during the notice period or paid out with your final salary, depending on what the handover plan needs.
+
+On your last day you return your laptop, security keys and any other company equipment to IT, and your accounts are closed at the end of the day. A People Partner offers you an exit interview within 5 working days of your last day. Exit interviews are voluntary, and what you say is summarised without your name in a quarterly report to the leadership team.
+
+Former employees are welcome to apply for roles at Falak again. People who return within two years keep their previous service for the purpose of annual leave, so the 28-day entitlement is not reset for someone who had already reached it.
+
+
+25. GLOSSARY
+
+Calibration: a meeting in which managers compare ratings across a department so that the same standard is applied.
+
+Core hours: the part of the working day, 10:00 to 14:30, when everyone is expected to be available.
+
+Hard-to-fill list: roles that the Talent team has found difficult to hire for; referrals for these roles earn the higher referral bonus.
+
+Incident commander: the person who leads the response to a Sev-1 or Sev-2 incident and later runs the blameless review.
+
+People Partner: a member of the People Team assigned to support a group of departments.
+
+Quiet Thursday: the rule that no internal meetings are scheduled after 13:00 on Thursdays.
+
+Sanad buddy: a volunteer colleague from another team who supports a new joiner during onboarding.
+
+Workbench: Falak Software's main product for planning stock, orders and deliveries.
+
+This handbook was last reviewed in February 2026. Questions or suggestions for the next edition can be sent to the People Team through the HR portal.

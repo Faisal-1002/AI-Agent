@@ -1,0 +1,71 @@
+sku,item,warehouse,quantity,reorder_level,unit_cost_sar
+FS-HW-0401,14-inch developer laptop 32GB,Qalamar North,46,20,6850
+FS-HW-0402,14-inch developer laptop 16GB,Qalamar North,31,15,5420
+FS-HW-0403,16-inch performance laptop 64GB,Sadeem Central,12,6,11900
+FS-HW-0408,13-inch ultralight laptop,Wadi Saraab,19,10,4980
+FS-HW-0410,Mini desktop workstation,Sadeem Central,8,4,7350
+FS-HW-0412,27-inch monitor (matte),Qalamar North,74,30,1290
+FS-HW-0413,27-inch monitor (glossy),Qalamar North,22,10,1240
+FS-HW-0415,32-inch 4K monitor,Sadeem Central,17,8,2310
+FS-HW-0418,24-inch monitor,Wadi Saraab,58,25,760
+FS-HW-0424,Portable 15-inch monitor,Wadi Saraab,14,6,980
+FS-HW-0430,QA test tablet 11-inch,Sadeem Central,26,10,2150
+FS-HW-0431,QA test tablet 8-inch,Sadeem Central,9,10,1340
+FS-HW-0440,Test handset flagship,Qalamar North,11,5,3890
+FS-HW-0441,Test handset mid-range,Qalamar North,23,10,1420
+FS-HW-0442,Test handset entry-level,Wadi Saraab,30,12,690
+FS-HW-0450,Webcam 1080p,Qalamar North,64,25,310
+FS-HW-0451,Webcam 4K with privacy shutter,Sadeem Central,18,8,640
+FS-HW-0455,Conference room speakerphone,Sadeem Central,7,3,1780
+FS-HW-0456,Conference room camera bar,Qalamar North,5,2,4650
+FS-HW-0460,Noise-cancelling headset,Qalamar North,52,20,540
+FS-HW-0461,Wired headset with boom mic,Wadi Saraab,40,20,180
+FS-AC-0101,USB-C docking station 4-port,Qalamar North,38,15,420
+FS-AC-0102,USB-C docking station 6-port,Qalamar North,27,15,610
+FS-AC-0103,USB-C docking station dual display,Sadeem Central,15,8,890
+FS-AC-0110,Wireless keyboard (English/Arabic),Qalamar North,85,30,165
+FS-AC-0111,Wired keyboard (English/Arabic),Wadi Saraab,47,20,95
+FS-AC-0115,Wireless mouse,Qalamar North,96,40,85
+FS-AC-0116,Vertical ergonomic mouse,Sadeem Central,21,10,210
+FS-AC-0120,Laptop stand aluminium,Qalamar North,44,20,140
+FS-AC-0121,Monitor arm single,Sadeem Central,33,12,260
+FS-AC-0122,Monitor arm dual,Sadeem Central,16,8,430
+FS-AC-0130,Ergonomic footrest,Wadi Saraab,13,6,175
+FS-AC-0131,Gel wrist rest,Wadi Saraab,60,25,45
+FS-AC-0140,65W USB-C charger,Qalamar North,72,30,150
+FS-AC-0141,100W USB-C charger,Sadeem Central,29,15,240
+FS-AC-0145,Laptop backpack,Qalamar North,35,15,320
+FS-AC-0146,Laptop sleeve 14-inch,Wadi Saraab,41,15,110
+FS-AC-0150,Hardware security key,Qalamar North,120,50,230
+FS-NW-0201,24-port managed switch,Sadeem Central,9,4,3150
+FS-NW-0202,48-port managed switch,Sadeem Central,6,3,5480
+FS-NW-0204,8-port desktop switch,Wadi Saraab,25,10,290
+FS-NW-0207,Wireless access point indoor,Qalamar North,18,12,1150
+FS-NW-0208,Wireless access point outdoor,Wadi Saraab,4,3,2240
+FS-NW-0210,Branch firewall appliance,Sadeem Central,3,2,8900
+FS-NW-0212,10G optical transceiver,Sadeem Central,44,20,180
+FS-NW-0215,Rack-mount patch panel 24-port,Sadeem Central,12,5,260
+FS-CB-0301,USB-C to USB-C cable 1m,Qalamar North,210,80,35
+FS-CB-0302,USB-C to USB-C cable 2m,Qalamar North,130,60,48
+FS-CB-0305,Monitor video cable 2m,Qalamar North,95,40,40
+FS-CB-0310,Cat6 patch cable 1m,Sadeem Central,340,120,12
+FS-CB-0311,Cat6 patch cable 3m,Sadeem Central,190,80,18
+FS-CB-0312,Cat6 patch cable 10m,Wadi Saraab,55,20,42
+FS-CB-0320,Fibre patch cable LC-LC 5m,Sadeem Central,64,25,95
+FS-CB-0330,Power extension strip 6-socket,Wadi Saraab,48,20,70
+FS-SV-0601,Server rack 42U,Sadeem Central,2,1,6200
+FS-SV-0602,Metered rack power strip,Sadeem Central,10,4,1950
+FS-SV-0605,1.92TB NVMe drive,Sadeem Central,36,16,1480
+FS-SV-0606,3.84TB NVMe drive,Sadeem Central,20,10,2720
+FS-SV-0610,64GB server memory module,Sadeem Central,48,24,1130
+FS-SV-0611,32GB server memory module,Wadi Saraab,30,16,610
+FS-SV-0615,Rack-mount UPS 3kVA,Wadi Saraab,4,2,7400
+FS-SV-0620,Server rail kit,Sadeem Central,15,6,240
+FS-FN-0701,Height-adjustable desk 160cm,Qalamar North,21,8,1890
+FS-FN-0702,Height-adjustable desk 140cm,Wadi Saraab,14,6,1640
+FS-FN-0705,Ergonomic office chair,Qalamar North,37,12,1350
+FS-FN-0706,Meeting room chair,Sadeem Central,60,20,420
+FS-FN-0710,Acoustic booth panel,Sadeem Central,8,4,980
+FS-FN-0712,Mobile whiteboard 180cm,Qalamar North,6,3,760
+FS-FN-0715,Lockable pedestal drawer,Wadi Saraab,28,10,390
+FS-FN-0720,LED desk lamp,Wadi Saraab,45,20,120

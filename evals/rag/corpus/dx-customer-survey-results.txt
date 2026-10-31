@@ -1,0 +1,54 @@
+PELLACORE SYSTEMS
+Wayvine Dispatch Customer Survey: Spring Wave Results
+Prepared by Customer Insights (research lead: Dagny)
+Distribution: product, support and customer success teams
+
+----------------------------------------------------------------
+
+1. ABOUT THIS SURVEY
+
+The spring wave of the Wayvine Dispatch customer survey ran for three weeks and collected 1,284 completed responses from fleet operators, dispatchers and warehouse supervisors who use the product at least weekly. Respondents answered 22 closed questions and two open questions. Open comments were coded into themes by two analysts working independently, and disagreements were resolved by Dagny.
+
+Results are compared with the autumn wave wherever the same question was asked. Percentages are rounded to the nearest whole number, so some groups do not add up to exactly 100.
+
+2. HEADLINE NUMBERS
+
+Overall satisfaction fell to 72 percent satisfied or very satisfied, down from 76 percent in the autumn wave. The share of customers who said they intend to renew held steady at 81 percent. Support remains the strongest area: 88 percent of respondents who contacted support in the past quarter rated the experience as good or very good.
+
+Ease of use dropped from 69 to 63 percent of respondents agreeing that the product is easy to learn, which matches the open comments below.
+
+3. TOP THEMES IN OPEN COMMENTS
+
+Of the comments that described a problem, the themes were distributed as follows:
+
+  Onboarding and initial setup confusion ......... 31%
+  Slow mobile app on older driver phones ......... 27%
+  Invoice and billing clarity .................... 18%
+  Route optimisation suggestions ignored ......... 12%
+  Everything else ................................ 12%
+
+Onboarding and initial setup confusion was the single largest complaint, cited in 31 percent of problem comments. Customers described importing depots and vehicle lists as unclear, and several said they needed a support call just to finish the first week of setup. Mobile app speed came second at 27 percent, concentrated among fleets whose drivers use phones that are three or more years old.
+
+4. FEATURE REQUESTS
+
+Asked to pick up to two features they would most like to see, respondents chose:
+
+  Offline mode for drivers ....................... 44%
+  Bulk editing of delivery windows ............... 29%
+  Customer-facing live tracking page ............. 24%
+  Dark mode in the dispatcher console ............ 17%
+  Shift handover notes ........................... 15%
+
+Offline mode for drivers was requested by 44 percent of respondents, the highest of any feature for the second wave in a row. Drivers in rural areas reported losing their route list whenever the signal dropped.
+
+5. SEGMENT VIEW
+
+Satisfaction differed sharply by fleet size. Small fleets with fewer than 20 vehicles reported 79 percent satisfaction, mid-sized fleets 70 percent, and large fleets with more than 200 vehicles only 61 percent. Large fleets were the most likely to mention billing clarity, often because they receive one invoice per depot rather than a single consolidated statement.
+
+6. WHAT CUSTOMERS PRAISED
+
+The most common positive themes were the speed and friendliness of support, the clarity of the dispatcher map, and the reliability of proof-of-delivery photos. Several dispatchers said the daily summary report saves them roughly half an hour each morning.
+
+7. RECOMMENDED ACTIONS
+
+Customer Insights recommends three priorities for the next two quarters: a guided setup assistant that walks new customers through depots, vehicles and drivers; a performance pass on the driver app aimed at older phones; and a design spike on offline mode. A consolidated invoice option for large fleets should be scoped with the billing team. The next survey wave is planned for the autumn and will repeat the same core questions so that trends can be tracked.

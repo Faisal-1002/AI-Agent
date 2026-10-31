@@ -14,6 +14,7 @@
     "build": "vite build",
     "gateway:keys": "tsx scripts/gateway-keys.ts",
     "guard:eval": "tsx scripts/guard-eval.ts",
+    "rag:eval": "tsx scripts/rag-eval.ts",
     "db:setup": "tsx scripts/db-setup.ts",
     "ask": "tsx scripts/ask.ts",
     "auth:setup": "tsx scripts/auth-setup.ts",

@@ -1,0 +1,1257 @@
+[
+  {
+    "id": "ar-01",
+    "question": "كم يوم إجازة سنوية يستحق الموظف الذي أمضى ست سنوات في مؤسسة الواحة للتعليم؟",
+    "lang": "ar",
+    "kind": "arabic",
+    "evidence": [
+      {
+        "document": "ar-leave-policy.md",
+        "quote": "أما من أمضى خمس سنوات فأكثر ولم يكمل عشر سنوات فيستحق 28 يوم عمل سنويا"
+      }
+    ],
+    "answer": "28 يوم عمل في السنة (شريحة من خمس سنوات إلى أقل من عشر سنوات).",
+    "mustInclude": [
+      "(\\b28\\b|٢٨|ثمانية وعشرين|ثمانية وعشرون)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-02",
+    "question": "ما مدة برنامج WT-301 وكم رسومه؟",
+    "lang": "ar",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "ar-training-programs.md",
+        "quote": "وتبلغ مدته 60 ساعة، منها 20 ساعة في المختبر العملي، ورسومه 3,400 ريال"
+      }
+    ],
+    "answer": "60 ساعة (منها 20 ساعة مختبر عملي)، والرسوم 3,400 ريال.",
+    "mustInclude": [
+      "(\\b60\\b|٦٠|ستين|ستون)",
+      "(3[,٬.]?400|٣[,٬.]?٤٠٠)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-03",
+    "question": "ما المتطلبات السابقة للالتحاق ببرنامج WT-410؟",
+    "lang": "ar",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "ar-training-programs.md",
+        "quote": "ويشترط للالتحاق به اجتياز البرنامجين WT-301 وWT-205 معا"
+      }
+    ],
+    "answer": "اجتياز البرنامجين WT-301 (البرمجة بلغة بايثون للمبتدئين) و WT-205 (تحليل البيانات باستخدام الجداول الإلكترونية) معا.",
+    "mustInclude": [
+      "WT\\s*[-‐‑–— ]?\\s*(?:301|٣٠١)|بايثون",
+      "WT\\s*[-‐‑–— ]?\\s*(?:205|٢٠٥)|الجداول ال[إا]لكترونية"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-04",
+    "question": "إذا مرضت يوما واحدا فقط وغبت عن الدوام، هل يلزمني إحضار ورقة من الطبيب؟",
+    "lang": "ar",
+    "kind": "paraphrase",
+    "evidence": [
+      {
+        "document": "ar-leave-policy.md",
+        "quote": "لمدة تصل إلى يومين متتاليين دون الحاجة إلى تقرير طبي، بحد أقصى ست مرات في السنة الواحدة"
+      }
+    ],
+    "answer": "لا، يجوز الغياب بسبب المرض حتى يومين متتاليين دون تقرير طبي، بحد أقصى ست مرات في السنة.",
+    "mustInclude": [
+      "(يومين|\\b2\\b|٢|يومان)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-05",
+    "question": "ما مدة الإشعار المطلوبة لإنهاء اتفاقية الخدمات التقنية مع المورد قبل انتهاء مدتها؟",
+    "lang": "ar",
+    "kind": "arabic",
+    "evidence": [
+      {
+        "document": "ar-service-agreement.txt",
+        "quote": "بموجب إشعار كتابي يسلم للطرف الآخر قبل 60 يوما على الأقل من تاريخ الإنهاء المقترح"
+      }
+    ],
+    "answer": "إشعار كتابي قبل 60 يوما على الأقل من تاريخ الإنهاء المقترح.",
+    "mustInclude": [
+      "(\\b60\\b|٦٠|ستين|ستون)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-06",
+    "question": "أحتاج إلى إجازة بلا راتب لمدة أسبوع، فمن الأشخاص الذين يجب أن يوافقوا على طلبي؟",
+    "lang": "ar",
+    "kind": "paraphrase",
+    "evidence": [
+      {
+        "document": "ar-leave-policy.md",
+        "quote": "وكذلك جميع طلبات الإجازة دون أجر أيا كانت مدتها، فتمر بالمشرف المباشر ورئيس القسم"
+      },
+      {
+        "document": "ar-leave-policy.md",
+        "quote": "ثم تحتاج إلى موافقة مديرة الموارد البشرية (هالة) والاعتماد النهائي من المدير العام (ماجد)"
+      }
+    ],
+    "answer": "الإجازة دون أجر تحتاج أربعة مستويات أيا كانت مدتها: المشرف المباشر، ثم رئيس القسم، ثم مديرة الموارد البشرية (هالة)، ثم الاعتماد النهائي من المدير العام (ماجد).",
+    "mustInclude": [
+      "مشرف",
+      "رئيس\\s*(ال)?قسم",
+      "(الموارد البشرية|هالة)",
+      "(المدير العام|ماجد)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-07",
+    "question": "لو تركت الدورة بعد ثلاثة أيام من بدايتها، كم سيعاد لي من المبلغ الذي دفعته؟",
+    "lang": "ar",
+    "kind": "paraphrase",
+    "evidence": [
+      {
+        "document": "ar-faq.md",
+        "quote": "أما إذا انسحبت خلال الأسبوع الأول من انطلاق البرنامج فيسترد نصف الرسوم فقط"
+      }
+    ],
+    "answer": "نصف الرسوم (50%) لأن الانسحاب وقع خلال الأسبوع الأول من البرنامج.",
+    "mustInclude": [
+      "(نصف|\\b50\\b|٥٠|half|خمسين|خمسون)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-08",
+    "question": "ما الحد الأقصى لمجموع الغرامات على المورد في الاتفاقية SA-WAHA-117؟",
+    "lang": "ar",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "ar-service-agreement.txt",
+        "quote": "لا يتجاوز مجموع الغرامات المفروضة على المورد طوال مدة الاتفاقية 10% من القيمة الإجمالية للاتفاقية"
+      }
+    ],
+    "answer": "10% من القيمة الإجمالية للاتفاقية (أي 99,600 ريال من أصل 996,000 ريال)، ويحق للمؤسسة إنهاء الاتفاقية فورا إذا بلغت الغرامات هذا الحد.",
+    "mustInclude": [
+      "(\\b10\\b|١٠|عشرة|99[,٬.]?600|٩٩[,٬.]?٦٠٠)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-09",
+    "question": "كم يوما من رصيد الإجازة السنوية يمكن لموظف مؤسسة الواحة للتعليم ترحيلها إلى السنة التالية، وإلى متى يجب استخدامها؟",
+    "lang": "ar",
+    "kind": "arabic",
+    "evidence": [
+      {
+        "document": "ar-leave-policy.md",
+        "quote": "يحق للموظف ترحيل ما لا يزيد على 7 أيام من رصيده غير المستخدم إلى السنة التالية فقط"
+      },
+      {
+        "document": "ar-leave-policy.md",
+        "quote": "ويجب استخدام الأيام المرحلة قبل نهاية شهر مارس من السنة التالية وإلا سقطت نهائيا دون تعويض"
+      }
+    ],
+    "answer": "حتى 7 أيام فقط، ويجب استخدامها قبل نهاية شهر مارس من السنة التالية وإلا سقطت.",
+    "mustInclude": [
+      "(\\b7\\b|٧|سبع)",
+      "(مارس|آذار|march)"
+    ],
+    "mustNotInclude": [
+      "(\\b5\\b|٥|خمس[ةه]?)\\s*(أيام|ايام|يوم|days)"
+    ]
+  },
+  {
+    "id": "ar-10",
+    "question": "At the Al-Waha Education Institute, how many hours of the machine learning course are set aside for the final team project?",
+    "lang": "en",
+    "kind": "cross-lingual",
+    "evidence": [
+      {
+        "document": "ar-training-programs.md",
+        "quote": "وتبلغ مدته الإجمالية 72 ساعة، يخصص منها 12 ساعة لمشروع تخرج يعمل عليه المتدربون"
+      }
+    ],
+    "answer": "12 hours of the 72-hour Introduction to Machine Learning program (WT-410).",
+    "mustInclude": [
+      "(\\b12\\b|١٢|twelve)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-11",
+    "question": "Under the institute's IT services contract, how much is each payment to the supplier and how often is it paid?",
+    "lang": "en",
+    "kind": "cross-lingual",
+    "evidence": [
+      {
+        "document": "ar-service-agreement.txt",
+        "quote": "وتدفع المؤسسة هذه القيمة على ثماني دفعات ربع سنوية متساوية، قيمة كل منها 124,500 ريال"
+      }
+    ],
+    "answer": "Eight equal quarterly payments of 124,500 SAR each, due within 30 days of a valid invoice.",
+    "mustInclude": [
+      "(124[,. ٬]?500|١٢٤[,٬ ]?٥٠٠)",
+      "(quarter|ربع|every (three|3) months|(four|4) times (a|per|each) year)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-12",
+    "question": "What minimum monthly availability does the supplier guarantee for the Al-Waha institute's e-learning platform?",
+    "lang": "en",
+    "kind": "cross-lingual",
+    "evidence": [
+      {
+        "document": "ar-service-agreement.txt",
+        "quote": "يضمن المورد ألا تقل نسبة توافر منصة مشكاة عن 99.5% شهريا"
+      }
+    ],
+    "answer": "At least 99.5% per month, excluding up to eight hours of pre-agreed scheduled maintenance.",
+    "mustInclude": [
+      "(99[.,٫]5|٩٩[.,٫]٥)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-13",
+    "question": "How many sick days per service year do Al-Waha Education Foundation staff get on full pay, and after that runs out, what are they paid and for how long?",
+    "lang": "en",
+    "kind": "cross-lingual",
+    "evidence": [
+      {
+        "document": "ar-leave-policy.md",
+        "quote": "على 30 يوما من الإجازة المرضية بأجر كامل، تليها 60 يوما بنسبة 75% من الأجر، ثم 30 يوما إضافية دون أجر"
+      }
+    ],
+    "answer": "30 days at full pay per service year, then 60 days at 75% of pay, then a further 30 days unpaid.",
+    "mustInclude": [
+      "(\\b30\\b|٣٠|thirty)",
+      "(\\b75\\b|٧٥|three[ -]?quarters?)",
+      "(\\b60\\b|٦٠|sixty)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-14",
+    "question": "What discount does an employer get if it signs up five or more of its staff for the same Al-Waha training course?",
+    "lang": "en",
+    "kind": "cross-lingual",
+    "evidence": [
+      {
+        "document": "ar-training-programs.md",
+        "quote": "تمنح المؤسسة خصما بنسبة 15% على الرسوم عند تسجيل خمسة موظفين أو أكثر من الجهة نفسها"
+      }
+    ],
+    "answer": "A 15% discount on the fees (it cannot be combined with the 10% early-registration discount; the higher one applies).",
+    "mustInclude": [
+      "(\\b15\\b|١٥|fifteen)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ar-15",
+    "question": "How many days of paternity leave does the Al-Waha Education Institute give to employees who become fathers?",
+    "lang": "en",
+    "kind": "unanswerable",
+    "evidence": [],
+    "answer": "not in the documents",
+    "mustInclude": [],
+    "mustNotInclude": [
+      "(paternity|fathers?)[^.;,:()–—]{0,25}(?<![\\d٠-٩])(70|٧٠)(?![\\d٠-٩])",
+      "(?<![\\d٠-٩])(70|٧٠)(?![\\d٠-٩])\\s*(-\\s*)?(working\\s+)?days?\\s+(of\\s+)?(paid\\s+)?(paternity|parental)"
+    ]
+  },
+  {
+    "id": "ar-16",
+    "question": "كم تبلغ رسوم إعادة إصدار شهادة البرنامج في مؤسسة الواحة للتعليم إذا فقدها المتدرب؟",
+    "lang": "ar",
+    "kind": "unanswerable",
+    "evidence": [],
+    "answer": "not in the documents",
+    "mustInclude": [],
+    "mustNotInclude": [
+      "(إصدار|استبدال|بدل فاقد|reissu|replac)[^.\\n]{0,60}(150|١٥٠)"
+    ]
+  },
+  {
+    "id": "dx-01",
+    "question": "What is the product code for Bluefen Cargo Lines' refrigerated overnight service?",
+    "lang": "en",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "dx-competitor-market-scan.md",
+        "quote": "The refrigerated overnight service is sold under product code BFC-CHILL-9"
+      }
+    ],
+    "answer": "BFC-CHILL-9 (2 to 7 degrees Celsius, VD 112 per pallet in band-one zones).",
+    "mustInclude": [
+      "BFC-CHILL-9"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "dx-02",
+    "question": "How much does Corvatta Freight charge to move one pallet in its Zone C?",
+    "lang": "en",
+    "kind": "fact",
+    "evidence": [
+      {
+        "document": "dx-competitor-market-scan.md",
+        "quote": "costs VD 44 per pallet in Zone A and VD 52.50 per pallet in Zone C"
+      }
+    ],
+    "answer": "VD 52.50 per pallet (list price, Pallet Saver product CVF-PS-12).",
+    "mustInclude": [
+      "52[.,]5"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "dx-03",
+    "question": "In Tarnwick Distribution's 2019 warehouse manual, what was the forklift speed limit inside racking aisles?",
+    "lang": "en",
+    "kind": "fact",
+    "evidence": [
+      {
+        "document": "dx-old-warehouse-manual-2019.md",
+        "quote": "Speed limits under the 2019 manual were 10 km/h on the open yard, 6 km/h inside racking aisles"
+      }
+    ],
+    "answer": "6 km/h inside racking aisles (10 km/h on the open yard, walking pace in loading bays). The manual is retired.",
+    "mustInclude": [
+      "\\b(6|six)\\s*(km|kilomet|kph)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "dx-04",
+    "question": "Under the old Tarnwick rules, how long could chilled stock stay too warm inside the building before it had to go into quarantine?",
+    "lang": "en",
+    "kind": "paraphrase",
+    "evidence": [
+      {
+        "document": "dx-old-warehouse-manual-2019.md",
+        "quote": "Any chilled product that spent more than 20 minutes outside its range inside the building"
+      }
+    ],
+    "answer": "Up to 20 minutes: any chilled product that spent more than 20 minutes outside its range inside the building was placed in the quarantine cage and assessed by the quality lead.",
+    "mustInclude": [
+      "\\b(20|twenty)[\\s-]*min"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "dx-05",
+    "question": "What is the per-person spending cap for the platform team offsite at Orrin Lake Lodge?",
+    "lang": "en",
+    "kind": "fact",
+    "evidence": [
+      {
+        "document": "dx-team-offsite-plan.md",
+        "quote": "The offsite budget is capped at 420 dollars per attendee."
+      }
+    ],
+    "answer": "420 dollars per attendee (covers accommodation, meals and Thursday activities; the coach is paid separately).",
+    "mustInclude": [
+      "\\b420\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "dx-06",
+    "question": "What is the minimum password length for a normal staff account under Brindlecoast's IT security guidelines?",
+    "lang": "en",
+    "kind": "fact",
+    "evidence": [
+      {
+        "document": "dx-it-security-guidelines.md",
+        "quote": "Every staff account must use a password or passphrase of at least 14 characters."
+      }
+    ],
+    "answer": "At least 14 characters (administrator and service-management accounts need at least 20).",
+    "mustInclude": [
+      "\\b(14|fourteen)\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "dx-07",
+    "question": "At Brindlecoast, if I notice something that might be a breach, how much time do I have to flag it?",
+    "lang": "en",
+    "kind": "paraphrase",
+    "evidence": [
+      {
+        "document": "dx-it-security-guidelines.md",
+        "quote": "Report any suspected security incident to the Security Desk within 4 hours of noticing it"
+      }
+    ],
+    "answer": "Report it to the Security Desk within 4 hours of noticing it, even if unsure (lost or stolen devices within 1 hour).",
+    "mustInclude": [
+      "\\b(4|four)\\s*-?\\s*(hours?|hrs?|h)\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "dx-08",
+    "question": "What annoyed Wayvine Dispatch customers the most according to the spring survey?",
+    "lang": "en",
+    "kind": "paraphrase",
+    "evidence": [
+      {
+        "document": "dx-customer-survey-results.txt",
+        "quote": "Onboarding and initial setup confusion was the single largest complaint, cited in 31 percent of problem comments."
+      }
+    ],
+    "answer": "Onboarding and initial setup confusion, cited in 31 percent of problem comments.",
+    "mustInclude": [
+      "onboard|set\\s*-?up",
+      "\\b31\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "dx-09",
+    "question": "What share of Wayvine Dispatch survey respondents asked for an offline mode for drivers?",
+    "lang": "en",
+    "kind": "fact",
+    "evidence": [
+      {
+        "document": "dx-customer-survey-results.txt",
+        "quote": "Offline mode for drivers was requested by 44 percent of respondents"
+      }
+    ],
+    "answer": "44 percent, the most requested feature.",
+    "mustInclude": [
+      "\\b44\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "dx-10",
+    "question": "Who makes the QD-Trek 7, and what weighted score did that vendor get on the scanner shortlist?",
+    "lang": "en",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "dx-vendor-shortlist.md",
+        "quote": "Quorrel Devices finished first with a weighted score of 86 out of 100, driven by its QD-Trek 7 handheld"
+      }
+    ],
+    "answer": "Quorrel Devices, which ranked first with a weighted score of 86 out of 100.",
+    "mustInclude": [
+      "Quorrel",
+      "\\b86\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "dx-11",
+    "question": "What percentage of the Velmora Coast pallet market does Bluefen Cargo Lines hold?",
+    "lang": "en",
+    "kind": "unanswerable",
+    "evidence": [],
+    "answer": "not in the documents",
+    "mustInclude": [],
+    "mustNotInclude": [
+      "Bluefen(?:(?!Kestrelvane|than\\b|below\\b|under\\b|less\\b|largest\\b)[^.\\n]){0,80}(?<![\\d.])(23|٢٣)\\s*(%|٪|percent)"
+    ]
+  },
+  {
+    "id": "dx-12",
+    "question": "What time does the coach leave Orrin Lake Lodge on Friday to bring the team back?",
+    "lang": "en",
+    "kind": "unanswerable",
+    "evidence": [],
+    "answer": "Not in the documents. The offsite plan says return transport on the Friday is still being arranged with the travel desk; the only coach time given is the 08:30 Wednesday departure from the office car park.",
+    "mustInclude": [],
+    "mustNotInclude": [
+      "(?<!(?:Wednesday|office|outbound|car park)[^.;\\n]*)\\b0?8[:.]30(?!\\d)(?![^.;\\n]*(?:Wednesday|office|outbound|car park))"
+    ]
+  },
+  {
+    "id": "ops-01",
+    "question": "What goes in ZONE-B4?",
+    "lang": "en",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "ops-warehouse-operations-manual.md",
+        "quote": "ZONE-B4 is the secure cage for high-value goods such as consumer electronics"
+      },
+      {
+        "document": "ops-warehouse-operations-manual.md",
+        "quote": "only reach truck operators who hold the High-Bay Endorsement may put away or retrieve pallets there"
+      }
+    ],
+    "answer": "ZONE-B4 is the secure cage for high-value goods such as consumer electronics, small kitchen appliances and boxed cosmetics. Entry needs the B4 badge permission, and only reach truck operators with the High-Bay Endorsement may put away or retrieve there.",
+    "mustInclude": [
+      "high[- ]value|valuable|electronics|secure cage"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-02",
+    "question": "At what temperature, and after how long, does the chilled store raise a high-temperature alarm?",
+    "lang": "en",
+    "kind": "fact",
+    "evidence": [
+      {
+        "document": "ops-warehouse-operations-manual.md",
+        "quote": "raised when the air temperature stays above 8.5 °C for more than 12 consecutive minutes"
+      }
+    ],
+    "answer": "When the air temperature in ZONE-F1 stays above 8.5 °C for more than 12 consecutive minutes.",
+    "mustInclude": [
+      "8[.,]5",
+      "\\b12\\b|twelve"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-03",
+    "question": "How long is a forklift driver's ticket good for at the Thamra Inland Hub before they have to be tested again?",
+    "lang": "en",
+    "kind": "paraphrase",
+    "evidence": [
+      {
+        "document": "ops-warehouse-operations-manual.md",
+        "quote": "Certification is valid for 18 months from the assessment date."
+      }
+    ],
+    "answer": "18 months from the assessment date; a refresher assessment must be passed before it expires.",
+    "mustInclude": [
+      "\\b18\\b|eighteen|year and a half|1\\.5 years"
+    ],
+    "mustNotInclude": [
+      "\\b36\\b"
+    ]
+  },
+  {
+    "id": "ops-04",
+    "question": "During a stock count, how big a gap between the counted and system quantity is allowed before someone has to recount?",
+    "lang": "en",
+    "kind": "deep",
+    "evidence": [
+      {
+        "document": "ops-warehouse-operations-manual.md",
+        "quote": "A location passes the count if the counted quantity is within 0.5 percent of the system quantity."
+      }
+    ],
+    "answer": "Up to 0.5 percent. A larger variance triggers a blind recount by a different associate within 24 hours.",
+    "mustInclude": [
+      "0[.,]5|half (a|of one) ?(per ?cent|%)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-05",
+    "question": "I'm on the afternoon shift - what time do I finish?",
+    "lang": "en",
+    "kind": "paraphrase",
+    "evidence": [
+      {
+        "document": "ops-warehouse-operations-manual.md",
+        "quote": "the Dusk shift from 14:00 to 22:00, and the Night shift from 22:00 to 06:00"
+      },
+      {
+        "document": "ops-warehouse-operations-manual.md",
+        "quote": "Each shift overlaps the next by a 15-minute handover window"
+      }
+    ],
+    "answer": "The afternoon (Dusk) shift runs from 14:00 to 22:00, so it finishes at 22:00, followed by a 15-minute handover overlap.",
+    "mustInclude": [
+      "22[:.]?00|10(?:[:.]00)? ?(?:pm|p\\.m\\.)"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-06",
+    "question": "What does CXD mean?",
+    "lang": "en",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "ops-glossary.md",
+        "quote": "CXD (Cross-Dock): Freight that moves straight from an inbound door to an outbound door"
+      }
+    ],
+    "answer": "Cross-Dock: freight that goes straight from an inbound door to an outbound door without being put away; it is staged at Doors 1 to 3 and must leave within six hours.",
+    "mustInclude": [
+      "cross[- ]?dock"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-07",
+    "question": "What is an RTW order?",
+    "lang": "en",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "ops-glossary.md",
+        "quote": "RTW (Ready To Wave): The status given to an order when every order line has stock allocated"
+      }
+    ],
+    "answer": "Ready To Wave: an order whose every line has stock allocated in a pickable zone, so it can be released into the next pick wave.",
+    "mustInclude": [
+      "ready[\\s\\-‐‑–]*to[\\s\\-‐‑–]*wave|stock[^.]{0,40}allocat|allocat[^.]{0,40}stock"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-08",
+    "question": "How much does a QF-PAL-2209 cost?",
+    "lang": "en",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "ops-product-catalog.md",
+        "quote": "Price: SAR 85 each, or SAR 78 each when bought in bundles of 20."
+      },
+      {
+        "document": "ops-product-catalog.md",
+        "quote": "All prices are in SAR per unit and exclude value-added tax."
+      }
+    ],
+    "answer": "SAR 85 each, or SAR 78 each in bundles of 20 (excluding VAT).",
+    "mustInclude": [
+      "\\b85\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-09",
+    "question": "Which of the cooler boxes you sell keeps things cold the longest, and for how many hours?",
+    "lang": "en",
+    "kind": "paraphrase",
+    "evidence": [
+      {
+        "document": "ops-product-catalog.md",
+        "quote": "it holds 2 to 8 °C for 48 hours, the longest hold time in the range"
+      }
+    ],
+    "answer": "The 90-litre Insulated Cold Box QF-CLD-0900, which holds 2 to 8 °C for 48 hours with eight gel packs.",
+    "mustInclude": [
+      "QF-CLD-0900|90[- ]?(litre|liter|l\\b)",
+      "\\b48\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-10",
+    "question": "What is the maximum load per beam level on QF-RCK-4200?",
+    "lang": "en",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "ops-product-catalog.md",
+        "quote": "The maximum beam load is 2,000 kg per level, and the bay weighs 118 kg in total."
+      }
+    ],
+    "answer": "2,000 kg per beam level.",
+    "mustInclude": [
+      "2[,. ]?000"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-11",
+    "question": "How much did the board approve for the second cold store, and who owns the project?",
+    "lang": "en",
+    "kind": "fact",
+    "evidence": [
+      {
+        "document": "ops-q3-board-meeting-notes.txt",
+        "quote": "The board approved a capital budget of SAR 4.6 million for a second cold store"
+      },
+      {
+        "document": "ops-q3-board-meeting-notes.txt",
+        "quote": "Owner: Rania, Head of Warehouse Operations. Target: operational by the end of Q2 next year."
+      }
+    ],
+    "answer": "SAR 4.6 million for ZONE-F2 (1,800 chilled pallet positions); owner is Rania, Head of Warehouse Operations.",
+    "mustInclude": [
+      "4[.,]6",
+      "Rania"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-12",
+    "question": "How much money did the directors sign off for trying out battery-powered lorries?",
+    "lang": "en",
+    "kind": "paraphrase",
+    "evidence": [
+      {
+        "document": "ops-q3-board-meeting-notes.txt",
+        "quote": "approved a pilot of 6 electric rigid trucks on the Port Kheraz shuttle route, with a budget of SAR 3.1 million"
+      }
+    ],
+    "answer": "SAR 3.1 million for a pilot of 6 electric rigid trucks on the Port Kheraz shuttle route, including charging equipment. The full programme was not approved.",
+    "mustInclude": [
+      "3[.,]1"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-13",
+    "question": "Who owns Project Lantern and when is it supposed to go live?",
+    "lang": "en",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "ops-q3-board-meeting-notes.txt",
+        "quote": "Owner: Omar, Head of Technology. Planned go-live is Week 9 of next year"
+      }
+    ],
+    "answer": "Omar, Head of Technology; go-live is planned for Week 9 of next year after two weeks of parallel running.",
+    "mustInclude": [
+      "Omar",
+      "week ?(9|nine)\\b|ninth week|\\bW9\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-14",
+    "question": "What was the root cause of the Dock 7 leveller failure?",
+    "lang": "en",
+    "kind": "fact",
+    "evidence": [
+      {
+        "document": "ops-incident-report-dock-7.md",
+        "quote": "The hydraulic lift valve on the Dock 7 leveller was worn and leaking"
+      },
+      {
+        "document": "ops-incident-report-dock-7.md",
+        "quote": "the preventive maintenance calendar was not transferred into the new contractor's system"
+      }
+    ],
+    "answer": "A worn, leaking hydraulic lift valve let the leveller lip drop under load; its preventive maintenance was six weeks overdue because the maintenance calendar was not transferred to the new facilities contractor.",
+    "mustInclude": [
+      "hydraulic",
+      "maintenance"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-15",
+    "question": "How much stock did we lose in the Dock 7 incident?",
+    "lang": "en",
+    "kind": "fact",
+    "evidence": [
+      {
+        "document": "ops-incident-report-dock-7.md",
+        "quote": "Three pallets were written off, with a stock loss of SAR 27,600"
+      }
+    ],
+    "answer": "Three pallets were written off, a stock loss of SAR 27,600.",
+    "mustInclude": [
+      "27[,. ]?600"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-16",
+    "question": "Which form was changed after the Dock 7 incident, and who has to sign it at the end of a shift?",
+    "lang": "en",
+    "kind": "multi",
+    "evidence": [
+      {
+        "document": "ops-incident-report-dock-7.md",
+        "quote": "Add a mandatory equipment defects section to the handover log HO-3"
+      },
+      {
+        "document": "ops-warehouse-operations-manual.md",
+        "quote": "The outgoing shift supervisor completes HO-3 and must sign it before leaving the site"
+      }
+    ],
+    "answer": "The shift handover log HO-3 gained a mandatory equipment defects section; the outgoing shift supervisor signs it before leaving, and the incoming supervisor countersigns.",
+    "mustInclude": [
+      "HO-?3",
+      "outgoing|ending|leaving|departing|finishing"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-17",
+    "question": "Where were all the pallets from the Dock 7 trailer placed on hold, and according to the warehouse operations manual, how long does the Quality Lead have to make a disposition decision on them?",
+    "lang": "en",
+    "kind": "multi",
+    "evidence": [
+      {
+        "document": "ops-incident-report-dock-7.md",
+        "quote": "All 14 pallets are placed on hold in ZONE-Q1"
+      },
+      {
+        "document": "ops-warehouse-operations-manual.md",
+        "quote": "the Quality Lead must make a disposition decision within 48 hours of the pallet entering the zone"
+      }
+    ],
+    "answer": "All 14 pallets were placed on hold in the quarantine zone ZONE-Q1, where the Quality Lead must make a disposition decision within 48 hours of each pallet entering the zone.",
+    "mustInclude": [
+      "ZONE-?Q1|quarantine",
+      "\\b48\\b|forty[- ]eight"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-18",
+    "question": "By which week should the last Dock 7 corrective action be finished, and who has to report its closure to the board?",
+    "lang": "en",
+    "kind": "multi",
+    "evidence": [
+      {
+        "document": "ops-incident-report-dock-7.md",
+        "quote": "when a chilled trailer is docked. Owner: Omar, Head of Technology. Due: Week 40."
+      },
+      {
+        "document": "ops-q3-board-meeting-notes.txt",
+        "quote": "The board asked Lina, Head of Quality, to report on the closure of all Dock 7 corrective actions"
+      }
+    ],
+    "answer": "Week 40 (CA-5, the dock door-open alarms); Lina, Head of Quality, reports closure at the Q4 board meeting.",
+    "mustInclude": [
+      "week ?40",
+      "Lina"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "ops-19",
+    "question": "How much budget did the board approve for the new Wadi Rimal hub?",
+    "lang": "en",
+    "kind": "false-premise",
+    "evidence": [
+      {
+        "document": "ops-q3-board-meeting-notes.txt",
+        "quote": "no budget was requested at this meeting"
+      }
+    ],
+    "answer": "None. The board did not approve a budget for the Wadi Rimal hub. The proposal was not ready for a decision, no budget was requested at the Q3 meeting, and the decision was deferred to the Q4 meeting.",
+    "mustInclude": [
+      "defer|postpon|no budget|not (yet )?(been )?approved|(did ?n[o'’]t|did not|has not|have not|hasn['’]t) (yet )?approve|no decision|not ready for a decision"
+    ],
+    "mustNotInclude": [
+      "4[.,]6 ?million",
+      "3[.,]1 ?million",
+      "1[.,]35 ?million",
+      "7[.,]2 ?million"
+    ]
+  },
+  {
+    "id": "ops-20",
+    "question": "What fee does Qamar Freight charge a carrier that misses its dock appointment?",
+    "lang": "en",
+    "kind": "unanswerable",
+    "evidence": [],
+    "answer": "not in the documents",
+    "mustInclude": [],
+    "mustNotInclude": [
+      "SAR ?[0-9]",
+      "[0-9] ?(SAR|riyals?)\\b"
+    ]
+  },
+  {
+    "id": "tr-01",
+    "question": "How many days do I have to submit an expense claim after a business trip?",
+    "lang": "en",
+    "kind": "version",
+    "evidence": [
+      {
+        "document": "tr-expense-policy-2026.md",
+        "quote": "Claims must be submitted within 30 days of the expense date, or of the last day of the trip for travel claims"
+      }
+    ],
+    "answer": "Within 30 days of the last day of the trip (travel claims are counted from the trip's last day; other claims from the expense date), under the Falak Software Expense Policy 2026, which supersedes the 2025 edition.",
+    "mustInclude": [
+      "\\b30\\b|thirty"
+    ],
+    "mustNotInclude": [
+      "^(?![\\s\\S]*\\b(?:2025|previous(?:ly)?|old(?:er)?|earlier|prior|former(?:ly)?|supersed\\w*|replac\\w*|down from|reduced|shortened)\\b)[\\s\\S]*\\b(?:45|forty-five)\\b"
+    ]
+  },
+  {
+    "id": "tr-02",
+    "question": "How much money can I get back for buying a desk and chair for working from home?",
+    "lang": "en",
+    "kind": "version",
+    "evidence": [
+      {
+        "document": "tr-expense-policy-2026.md",
+        "quote": "may claim a home office allowance of 2,000 SAR for a desk, chair, lighting or similar items"
+      }
+    ],
+    "answer": "A home office allowance of 2,000 SAR (2026 policy), claimable once in any three-year period.",
+    "mustInclude": [
+      "2[,.\\s]?000"
+    ],
+    "mustNotInclude": [
+      "^(?![\\s\\S]*\\b(?:2025|previous(?:ly)?|old(?:er)?|earlier|prior|former(?:ly)?|supersed\\w*|replac\\w*|down from|up from|reduced|increased|raised|shortened|lengthened)\\b)[\\s\\S]*1[,.\\s]?500"
+    ]
+  },
+  {
+    "id": "tr-03",
+    "question": "When is an employee allowed to fly business class?",
+    "lang": "en",
+    "kind": "version",
+    "evidence": [
+      {
+        "document": "tr-expense-policy-2026.md",
+        "quote": "Business class may be booked only when the scheduled flight time of a single leg is more than 8 hours"
+      }
+    ],
+    "answer": "Only when the scheduled flight time of a single leg is more than 8 hours (2026 policy).",
+    "mustInclude": [
+      "\\b8\\b|eight"
+    ],
+    "mustNotInclude": [
+      "^(?![\\s\\S]*\\b(?:2025|previous(?:ly)?|old(?:er)?|earlier|prior|former(?:ly)?|supersed\\w*|replac\\w*|down from|up from|reduced|increased|raised|shortened|lengthened)\\b)[\\s\\S]*(?:\\b6\\s*(?:hours?|hrs?|h)\\b|six hours)"
+    ]
+  },
+  {
+    "id": "tr-04",
+    "question": "What rate per kilometre is paid when I use my own car for company business?",
+    "lang": "en",
+    "kind": "version",
+    "evidence": [
+      {
+        "document": "tr-expense-policy-2026.md",
+        "quote": "Falak pays 0.95 SAR per kilometre"
+      }
+    ],
+    "answer": "0.95 SAR per kilometre (2026 policy).",
+    "mustInclude": [
+      "0[.,]95"
+    ],
+    "mustNotInclude": [
+      "^(?![\\s\\S]*\\b(?:2025|previous(?:ly)?|old(?:er)?|earlier|prior|former(?:ly)?|supersed\\w*|replac\\w*|down from|up from|reduced|increased|raised|shortened|lengthened)\\b)[\\s\\S]*0[.,]85"
+    ]
+  },
+  {
+    "id": "tr-05",
+    "question": "What extra pay do engineers get for a week on call, even if nothing goes wrong?",
+    "lang": "en",
+    "kind": "deep",
+    "evidence": [
+      {
+        "document": "tr-employee-handbook.pdf",
+        "quote": "on-call stipend of 400 SAR, whether or not you are paged"
+      }
+    ],
+    "answer": "An on-call stipend of 400 SAR per week of scheduled on-call duty, paid whether or not they are paged.",
+    "mustInclude": [
+      "\\b400\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-06",
+    "question": "At Falak, if I get paged for a complete outage, how quickly do I need to acknowledge it?",
+    "lang": "en",
+    "kind": "deep",
+    "evidence": [
+      {
+        "document": "tr-employee-handbook.pdf",
+        "quote": "A Sev-1 incident, meaning a full outage or data at risk for many customers, must be acknowledged within 15 minutes"
+      }
+    ],
+    "answer": "A full outage is a Sev-1 incident and must be acknowledged within 15 minutes.",
+    "mustInclude": [
+      "\\b15\\b|fifteen"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-07",
+    "question": "How long do I need to have been in my current job before I can apply to move to another team?",
+    "lang": "en",
+    "kind": "deep",
+    "evidence": [
+      {
+        "document": "tr-employee-handbook.pdf",
+        "quote": "you must have been in your current role for at least 14 months"
+      }
+    ],
+    "answer": "At least 14 months in the current role, and the most recent rating must be Strong or Exceeding.",
+    "mustInclude": [
+      "\\b14\\b|fourteen"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-08",
+    "question": "I'm a grade F6 engineer who has passed probation. How much notice do I have to give if I resign?",
+    "lang": "en",
+    "kind": "deep",
+    "evidence": [
+      {
+        "document": "tr-employee-handbook.pdf",
+        "quote": "60 days for employees in grades F5 and above"
+      }
+    ],
+    "answer": "60 days, because F6 falls under grades F5 and above.",
+    "mustInclude": [
+      "\\b60\\b|sixty"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-09",
+    "question": "How big is the bonus for referring someone who gets hired into a grade F5 position?",
+    "lang": "en",
+    "kind": "deep",
+    "evidence": [
+      {
+        "document": "tr-employee-handbook.pdf",
+        "quote": "For roles in grade F5 and above the referral bonus is 5,000 SAR"
+      }
+    ],
+    "answer": "5,000 SAR, paid once the new employee has passed probation.",
+    "mustInclude": [
+      "5[,.\\s]?000"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-10",
+    "question": "How many units of FS-HW-0412 do we have in stock?",
+    "lang": "en",
+    "kind": "table",
+    "evidence": [
+      {
+        "document": "tr-inventory.csv",
+        "quote": "FS-HW-0412,27-inch monitor (matte),Qalamar North,74,30,1290"
+      }
+    ],
+    "answer": "74 units (27-inch matte monitor, Qalamar North warehouse).",
+    "mustInclude": [
+      "\\b74\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-11",
+    "question": "What is the unit cost of the 6-port USB-C docking station?",
+    "lang": "en",
+    "kind": "table",
+    "evidence": [
+      {
+        "document": "tr-inventory.csv",
+        "quote": "FS-AC-0102,USB-C docking station 6-port,Qalamar North,27,15,610"
+      }
+    ],
+    "answer": "610 SAR per unit (SKU FS-AC-0102).",
+    "mustInclude": [
+      "\\b610\\b"
+    ],
+    "mustNotInclude": [
+      "\\b420\\b"
+    ]
+  },
+  {
+    "id": "tr-12",
+    "question": "What is the reorder level for FS-NW-0207?",
+    "lang": "en",
+    "kind": "table",
+    "evidence": [
+      {
+        "document": "tr-inventory.csv",
+        "quote": "FS-NW-0207,Wireless access point indoor,Qalamar North,18,12,1150"
+      }
+    ],
+    "answer": "12 (indoor wireless access point; 18 currently in stock).",
+    "mustInclude": [
+      "\\b12\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-13",
+    "question": "Which warehouse are the ergonomic footrests kept in?",
+    "lang": "en",
+    "kind": "table",
+    "evidence": [
+      {
+        "document": "tr-inventory.csv",
+        "quote": "FS-AC-0130,Ergonomic footrest,Wadi Saraab,13,6,175"
+      }
+    ],
+    "answer": "Wadi Saraab (SKU FS-AC-0130, 13 units).",
+    "mustInclude": [
+      "Wadi\\s*Saraab"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-14",
+    "question": "How many times does qamar-sync retry a failed call to catalog-api?",
+    "lang": "en",
+    "kind": "table",
+    "evidence": [
+      {
+        "document": "tr-service-config.json",
+        "quote": "\"name\": \"catalog-api\", \"timeout_ms\": 1500, \"max_retries\": 5"
+      }
+    ],
+    "answer": "5 retries (max_retries for the catalog-api upstream, with a 1500 ms timeout).",
+    "mustInclude": [
+      "\\b5\\b|five"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-15",
+    "question": "What is the per-minute request limit for gold-tier tenants?",
+    "lang": "en",
+    "kind": "table",
+    "evidence": [
+      {
+        "document": "tr-service-config.json",
+        "quote": "\"per_tenant_rpm\": { \"bronze\": 60, \"silver\": 240, \"gold\": 900, \"internal\": 5000 }"
+      }
+    ],
+    "answer": "900 requests per minute per tenant.",
+    "mustInclude": [
+      "\\b900\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-16",
+    "question": "Which Workbench release fixed FALK-3318?",
+    "lang": "en",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "tr-release-notes.html",
+        "quote": "Fixed FALK-3318: duplicate sync events were created when parallel fan-out was enabled"
+      }
+    ],
+    "answer": "Version 4.4 (released 15 September 2025).",
+    "mustInclude": [
+      "4\\.4"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-17",
+    "question": "What does error FS-E-2207 mean?",
+    "lang": "en",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "tr-release-notes.html",
+        "quote": "Exports are limited to 50,000 rows; larger requests fail with error FS-E-2207"
+      },
+      {
+        "document": "tr-release-notes.html",
+        "quote": "Exports above the new limit still return error FS-E-2207."
+      }
+    ],
+    "answer": "An export exceeded the row limit: originally 50,000 rows (4.2), raised to 100,000 rows in 4.6.",
+    "mustInclude": [
+      "export",
+      "rows?|limit|exceed|maximum|max\\b|too (large|big|many)|100[,.\\s]?000|١٠٠[٬,.]?٠٠٠"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-18",
+    "question": "What is a Sanad buddy?",
+    "lang": "en",
+    "kind": "keyword",
+    "evidence": [
+      {
+        "document": "tr-employee-handbook.pdf",
+        "quote": "Sanad buddy: an experienced colleague from a different team who meets you every week during your first 8 weeks"
+      }
+    ],
+    "answer": "An experienced volunteer colleague from a different team who is paired with a new joiner and meets them weekly during their first 8 weeks; not their manager.",
+    "mustInclude": [
+      "colleague|co-?worker|peer|mentor|employee|volunteer|staff|team ?member",
+      "new ?(joiner|hire|employee|starter|colleague|staff|team ?member|member|comer)|joiner|onboard|(8|eight) weeks"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-19",
+    "question": "In which Falak Workbench release did tenant isolation arrive, and what rollout percentage is its feature flag currently set to?",
+    "lang": "en",
+    "kind": "multi",
+    "evidence": [
+      {
+        "document": "tr-release-notes.html",
+        "quote": "Tenant isolation (beta): gold and internal tenants can run sync jobs in isolated worker pools"
+      },
+      {
+        "document": "tr-service-config.json",
+        "quote": "\"beta_tenant_isolation\": { \"enabled\": true, \"rollout_percent\": 35"
+      }
+    ],
+    "answer": "Tenant isolation arrived as a beta in version 4.5 (released 3 December 2025). Its beta_tenant_isolation flag in qamar-sync is enabled with a rollout of 35%, and only the gold and internal tiers are allowed.",
+    "mustInclude": [
+      "4\\.5",
+      "\\b35\\b"
+    ],
+    "mustNotInclude": []
+  },
+  {
+    "id": "tr-20",
+    "question": "Under the current expense policy, what are the nightly hotel cap and the daily meal allowance for a domestic overnight trip?",
+    "lang": "en",
+    "kind": "multi",
+    "evidence": [
+      {
+        "document": "tr-expense-policy-2026.md",
+        "quote": "hotel costs are reimbursed up to 750 SAR per night"
+      },
+      {
+        "document": "tr-expense-policy-2026.md",
+        "quote": "daily meal allowance of 200 SAR on domestic trips"
+      }
+    ],
+    "answer": "Hotel up to 750 SAR per night and a daily meal allowance of 200 SAR (2026 policy).",
+    "mustInclude": [
+      "\\b750\\b",
+      "\\b200\\b"
+    ],
+    "mustNotInclude": [
+      "^(?![\\s\\S]*\\b(?:2025|previous(?:ly)?|old(?:er)?|earlier|prior|former(?:ly)?|supersed\\w*|replac\\w*|down from|up from|reduced|increased|raised|shortened|lengthened)\\b)[\\s\\S]*\\b650\\b",
+      "^(?![\\s\\S]*\\b(?:2025|previous(?:ly)?|old(?:er)?|earlier|prior|former(?:ly)?|supersed\\w*|replac\\w*|down from|up from|reduced|increased|raised|shortened|lengthened)\\b)[\\s\\S]*\\b180\\b"
+    ]
+  },
+  {
+    "id": "tr-21",
+    "question": "What is the per-person spending limit for an internal team celebration dinner?",
+    "lang": "en",
+    "kind": "unanswerable",
+    "evidence": [],
+    "answer": "not in the documents",
+    "mustInclude": [],
+    "mustNotInclude": [
+      "\\b250\\b",
+      "\\b220\\b"
+    ]
+  },
+  {
+    "id": "tr-22",
+    "question": "What is the reorder level for FS-HW-0421?",
+    "lang": "en",
+    "kind": "unanswerable",
+    "evidence": [],
+    "answer": "not in the documents",
+    "mustInclude": [],
+    "mustNotInclude": [
+      "\\b30\\b"
+    ]
+  }
+]

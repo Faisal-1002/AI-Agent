@@ -1,0 +1,65 @@
+QAMAR FREIGHT - BOARD OF DIRECTORS
+MINUTES OF THE Q3 BOARD MEETING
+Held in Week 39 in the training room at the Thamra Inland Hub
+
+ATTENDEES
+Huda - Chair of the Board
+Faris - Chief Executive Officer
+Tariq - Chief Financial Officer
+Rania - Head of Warehouse Operations
+Samir - Fleet Director
+Lina - Head of Quality
+Omar - Head of Technology
+Yasmin - Commercial Director
+Minutes taken by Dalia, Board Secretary
+
+1. Q3 TRADING RESULTS
+
+Tariq presented the results for the quarter. Revenue was SAR 38.4 million, 11 percent higher than Q2, driven mainly by new chilled volumes for Tellara Fresh Markets. Operating margin was 8.7 percent against a budget of 9.5 percent; Tariq explained the gap by higher fuel costs and the use of agency labour during the peak in Weeks 30 to 34. On-time delivery for the quarter was 94.2 percent against a target of 96 percent. Damage and shortage claims paid in the quarter totalled SAR 412,000, of which SAR 27,600 related to the Dock 7 incident.
+
+The board asked Tariq to show agency labour cost as a separate line in the Q4 results pack.
+
+2. SECOND COLD STORE AT THAMRA INLAND HUB
+
+Rania presented the business case. Utilisation of the chilled store ZONE-F1 averaged 97 percent during Q3, and on eleven days chilled inbound loads had to be held in trailers because no positions were free. The board approved a capital budget of SAR 4.6 million for a second cold store, to be built as ZONE-F2 next to the existing chilled store. The new store will add 1,800 pallet positions held at 2 to 8 degrees. Owner: Rania, Head of Warehouse Operations. Target: operational by the end of Q2 next year. Tariq asked that monthly spend against the budget be reported to the finance committee.
+
+3. FLEET ELECTRIFICATION PILOT
+
+Samir proposed replacing 14 diesel rigid trucks with electric trucks over two years and requested SAR 7.2 million for the full programme. The board did not approve the full programme at this stage. Instead it approved a pilot of 6 electric rigid trucks on the Port Kheraz shuttle route, with a budget of SAR 3.1 million that includes charging equipment at the hub. Owner: Samir, Fleet Director. The board will decide on the full programme after six months of pilot data on cost per kilometre, charging time and route reliability.
+
+4. WAREHOUSE MANAGEMENT SYSTEM UPGRADE (PROJECT LANTERN)
+
+Omar reported that the current warehouse management system will leave vendor support at the end of next year. The board approved SAR 1.35 million for Project Lantern, the replacement of the warehouse management system. Owner: Omar, Head of Technology. Planned go-live is Week 9 of next year, after two weeks of parallel running. Rania will nominate two super-users from each shift to test pick, put-away and cycle count processes before go-live.
+
+5. DOCK 7 INCIDENT FOLLOW-UP
+
+Lina summarised incident QF-INC-0457 at Dock 7 in Week 32. Nobody was injured, but three pallets of chilled product were written off and Dock 7 was out of use for four days. The board noted the five corrective actions in the incident report. The board asked Lina, Head of Quality, to report on the closure of all Dock 7 corrective actions at the Q4 board meeting. Huda asked that dock equipment maintenance be added to the quarterly risk register.
+
+6. COMMERCIAL UPDATE
+
+Yasmin reported that the Tellara Fresh Markets contract has been renewed for three years from the start of next quarter, with an annual rate increase of 4 percent. Two new tenders have been submitted. The larger is an ambient storage and delivery contract for Durrah Home Goods worth about SAR 6 million a year, with a decision expected in Week 46. Yasmin also noted that two carriers on the Port Kheraz lane had received repeated No-Show Flags and are under commercial review.
+
+7. PROPOSED HUB AT WADI RIMAL
+
+Faris presented an early proposal to open a third hub at Wadi Rimal to serve the southern corridor. The board agreed that the case was not ready for a decision: no site has been selected, demand figures are still being collected, and no budget was requested at this meeting. Faris will bring a full business case to the Q4 meeting. Decision deferred.
+
+8. PEOPLE
+
+The board confirmed a hiring freeze on administrative roles until the end of Q4. Exceptions were approved for forklift operators and cold store associates, where vacancies are affecting service. The training budget was increased by SAR 180,000 to cover forklift certification and High-Bay Endorsement courses. Rania will agree the training plan with Nadia, Training Coordinator.
+
+SUMMARY OF DECISIONS
+
+D-01  Second cold store ZONE-F2 approved, SAR 4.6 million, owner Rania
+D-02  Electric truck pilot of 6 trucks approved, SAR 3.1 million, owner Samir
+D-03  Project Lantern approved, SAR 1.35 million, owner Omar
+D-04  Training budget increase approved, SAR 180,000, owner Rania
+D-05  Wadi Rimal hub, decision deferred to Q4, owner Faris
+
+ACTIONS
+- Tariq: separate agency labour line in the Q4 results pack.
+- Lina: report closure of Dock 7 corrective actions at the Q4 meeting.
+- Huda: add dock equipment maintenance to the risk register.
+- Faris: full Wadi Rimal business case for the Q4 meeting.
+
+NEXT MEETING
+The Q4 board meeting will be held in Week 50 at the Thamra Inland Hub.

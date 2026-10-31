@@ -55,6 +55,16 @@ ollama pull hf.co/mradermacher/Qwen3Guard-Gen-0.6B-GGUF:Q8_0
 ollama create ai-agent-qwen3guard-0.6b -f ollama/qwen3guard-0.6b.Modelfile
 ollama pull qwen3-embedding:0.6b
 ollama create ai-agent-qwen3-embedding-0.6b -f ollama/qwen3-embedding-0.6b.Modelfile
+ollama pull hf.co/mradermacher/Qwen3-Reranker-0.6B-GGUF:Q8_0
+ollama create ai-agent-qwen3-reranker-0.6b -f ollama/qwen3-reranker-0.6b.Modelfile
+```
+
+Ollama keeps at most 3 models loaded by default; Ai-Agent uses 5 (chat, titles, safety filter, embeddings,
+reranker), and with 3 they keep pushing each other out (reloading the 9B costs ~10 s). Raise the limit once, then
+restart Ollama:
+
+```powershell
+[Environment]::SetEnvironmentVariable("OLLAMA_MAX_LOADED_MODELS", "6", "User")
 ```
 
 Secrets: copy `.env.example` to `.env` and fill in long random values. `.env` is git-ignored; nothing
@@ -68,10 +78,15 @@ secret is committed.
 | `ai-agent-qwen3.5-0.8b` | CPU (`num_gpu 0`) | title in ~3 s | Titles. Thinking disabled with `reasoningEffort: "none"`. |
 | `ai-agent-qwen3guard-0.6b` | CPU (`num_gpu 0`) | ~0.5 s per check | Safety classifier ([Safety](#safety)). GGUF conversion of the official Apache-2.0 model. |
 | `ai-agent-qwen3-embedding-0.6b` | CPU (`num_gpu 0`) | 16 chunks in ~0.3 s (warm) | Document search ([Documents](#documents-rag)). 1024-dimension vectors, multilingual. |
+| `ai-agent-qwen3-reranker-0.6b` | GPU, 0.9 GB (2k context) | ~30 ms per passage, ~1 s per search | Reorders document search results ([Documents](#documents-rag)). GGUF conversion of the official Apache-2.0 model. |
 
 Lesson learned: with both models on a 10 GB GPU (plus the Windows desktop), VRAM overflowed and Windows
 spilled it into system RAM — generation dropped from ~46 to ~1 token/s. Keep the GPU for one model and put
 small helpers on the CPU. Check with `ollama ps` (PROCESSOR column) and `nvidia-smi`.
+
+The one exception is the reranker: on the CPU a search took ~16 s, on the GPU ~1 s. Measured with both loaded:
+9.8 of 10 GB VRAM in use (with the Windows desktop), and the 9B still at 100 tokens/s (99 without the reranker).
+That leaves ~0.4 GB: don't give the reranker a longer context, and watch `nvidia-smi` if something else uses the GPU.
 
 ## Run
 
@@ -91,13 +106,13 @@ With `npm run dev`, login is off (`AUTH_ENABLED` unset): you're the single local
 ## Gateway
 
 Every model call goes through **LiteLLM** (`gateway/config.yaml`). Consumers know only the gateway URL
-and model *names* (`qwen3.5-9b`, `qwen3.5-0.8b`, `qwen3-asr`, `qwen3-tts`) — not where the models run.
+and model *names* (`qwen3.5-9b`, `qwen3.5-0.8b`, `qwen3-reranker`, `qwen3-asr`, `qwen3-tts`, …) — not where the models run.
 Moving a model (say, Ollama → Amazon Bedrock) is a change to that one file.
 
 | Key (from `.env`) | Alias | May use | Used by |
 |---|---|---|---|
 | `LITELLM_KEY_HARNESS` | `harness` | `qwen3.5-9b`, `qwen3.5-0.8b` | the OpenCode harness |
-| `LITELLM_KEY_API` | `api` | `qwen3-guard`, `qwen3-embedding`, `qwen3-asr`, `qwen3-tts` (300 requests/min) | the backend's safety filter, document indexing/search and voice |
+| `LITELLM_KEY_API` | `api` | `qwen3-guard`, `qwen3-embedding`, `qwen3-reranker`, `qwen3-asr`, `qwen3-tts`, `qwen3.5-9b` (warm-up only); 3000 requests/min — one document search is 1 embedding + up to 30 reranker calls | the backend's safety filter, document indexing/search and voice |
 | `LITELLM_MASTER_KEY` | admin | everything | only `scripts/gateway-keys.ts` and the admin UI |
 
 - **Least privilege**: the harness key calling a voice model → `403`; the voice key calling chat → `403`; no key → `401`.
@@ -189,8 +204,16 @@ upload ──► api: extract text (PDF, Word, md, txt, csv, json, html) ──�
        ──► Qwen3-Embedding (via the gateway) ──► Postgres + pgvector (database "ai_agent", HNSW index)
 
 agent ──► docs_search_documents (custom tool) ──► api :3001/internal/docs ──► the conversation's owner
-      ──► nearest chunks by meaning, in THEIR library only ──► answer, naming the file
+      ──► the 30 nearest chunks by meaning, in THEIR library only
+      ──► Qwen3-Reranker reads each one with the question: "does it answer it?" ──► the best 5 ──► answer
 ```
+
+- **Two-step search** (`searchDocuments` in `server/documents.ts`): embeddings are fast but compare two *summaries*
+  of meaning, so the passage that answers is often 2nd or 6th. The reranker reads the actual text next to the
+  question and answers yes/no; the probability of "yes" (from the gateway's token probabilities) orders the 30
+  candidates and is the score the agent sees ("answers the question: 0.97"). It's a second model on the GPU (see
+  [Models](#models)). If it fails or takes over 10 s, search answers anyway in embedding order ("similarity: 0.62")
+  and the api logs it. Passage text can't pose as the reranker's prompt (template tokens and its labels are removed).
 
 - **Agentic RAG**: instead of pasting search results into every message, the agent gets **tools** — search,
   list, read a document page by page — and decides when to use them (it often refines its query and searches twice).
@@ -211,6 +234,69 @@ agent ──► docs_search_documents (custom tool) ──► api :3001/internal
 - **Asymmetric embeddings**: Qwen3-Embedding expects questions with an instruction prefix and documents without.
   Search works across languages — an Arabic question found and answered from an English document.
 - Documents live in the database, not on disk: the api stays stateless (any replica can serve any request).
+
+### Measuring it: `npm run rag:eval`
+
+A fixed, **fictional** test library (`evals/rag/`): 21 documents — English and Arabic, a 10-page PDF, a CSV table,
+JSON, HTML, a 2026 policy that replaces a 2025 one, an old manual of a *different* company with similar headings —
+and **70 questions**: facts, codes, paraphrases, table lookups, two-passage questions, English questions about Arabic
+documents, and 8 the library can't answer. Four agents wrote the documents and questions without seeing the search
+code; a skeptic checked each question (43 kept, 27 fixed, 0 dropped), and every evidence quote is checked against
+the extracted text before a run. Fictional on purpose: the model can't know the answers from training.
+
+```bash
+npm run rag:eval                             # retrieval: is the passage that answers in the top 1 / top 5? (~4 min)
+npm run rag:eval -- --answers                # the real agent answers all 70, graded (~10 min)
+npm run rag:eval -- --compare A.json B.json  # what changed, per kind and per question
+```
+
+Retrieval runs **this checkout's** search code against the cluster (its own port-forwards, a temporary space), so a
+change can be measured without a rebuild. Answers go through the deployed app as a temporary user; facts are checked
+with patterns, "not in the documents" replies by a judge (the 9B, reasoning off) when no pattern matches. A run
+where any search fell back from the reranker is marked invalid. Results go to `evals/results/` (not committed).
+
+**Retrieval** (63 answerable questions; hit@1 = the right passage is first, hit@5 = in the 5 the agent sees):
+
+| Search | hit@1 | hit@5 | MRR | English question, Arabic document (hit@5) | per search |
+|---|---|---|---|---|---|
+| Embeddings only (before) | 60% | 92% | 0.74 | 40% | 0.13 s |
+| + keywords (Postgres full-text), fused | 62% | 90% | 0.74 | 0% | 0.13 s |
+| Embeddings + Qwen3.5 0.8B as yes/no judge (CPU) | 65% | 89% | 0.75 | 40% | 16 s |
+| Keywords + embeddings + Qwen3-Reranker | 79% | 94% | 0.86 | 40% | 0.9 s |
+| **Embeddings + Qwen3-Reranker, 20 candidates** | 81% | 98% | 0.89 | 80% | 0.9 s |
+| **Embeddings + Qwen3-Reranker, 40 candidates** | 81% | 100% | 0.89 | 100% | 1.7 s |
+| **Now: embeddings + Qwen3-Reranker, 30 candidates, through the gateway** | **81%** | **100%** | **0.89** | **100%** | 1.5 s |
+
+**Answers** (all 70 questions, the real agent):
+
+| Run (70 questions, one run each) | Correct | Right when it searched (answerable) | Searched at all | Named the document | Seconds |
+|---|---|---|---|---|---|
+| Before: embeddings only | 81% | 93% (50 of 54) | 89% | 43% | 7.0 |
+| **After: + Qwen3-Reranker** | 79% | **98% (51 of 52)** | 84% | 30% | 5.2 |
+
+Overall the same, within the noise of one run: whether the agent searches **at all** varies from run to run (89% vs.
+84% here), and a question it doesn't search is almost always wrong. When it did search, answerable questions went from
+93% to 98% right — the passages search used to miss (an English question about the Arabic agreement, the 2019 manual
+of another company, an exact code) are found now, and the right passage comes first more often. What's left is the
+agent itself: it skips the search for questions like "What does CXD mean?", names its source in a third of answers,
+and still invents answers to some questions the library can't answer. Compare the next change with `--runs 3`.
+
+Lessons learned:
+
+- **Measure each step.** Keyword search sounded like an obvious win; on its own it made results *worse* (92% → 83%):
+  the Arabic stemmer kept English filler words ("what", "the"), so any passage full of them matched. Fixed, it
+  helped codes and tables but pushed the right Arabic passages out for English questions. With a reranker it added
+  nothing, so it's gone: less code, one less index.
+- **A small general model isn't a reranker.** Qwen3.5 0.8B as a yes/no judge barely helped and took 16 s per search;
+  the purpose-trained Qwen3-Reranker (0.6B) lifted the first-place hits by 21 points in under a second.
+- **Most wrong answers weren't search problems.** Before any change, the agent answered 11% of questions
+  *without searching* ("What does CXD mean?" → a general-knowledge guess instead of the glossary), named its source
+  in only 43% of answers, and invented answers to questions the library can't answer. Search can't fix those; the
+  agent's instructions can — the next thing to measure.
+- **One run of the agent is noise.** It samples, so the same 70 questions came out 81% and 79% with nearly the same
+  search quality. Separate what search can change (right when it searched) from what it can't (whether it searched).
+- **Graders need checking too.** "There is no market share percentage provided" is a correct "not in the documents";
+  the first pattern missed it. Re-grading saved answers (`--regrade`) keeps old and new runs comparable.
 
 Measured: the README (20 KB) → 23 passages; indexing takes ~2 s warm, ~17 s when the embedding model has to be
 loaded first (now rarer: models stay loaded for an hour — see [Speed and resources](#speed-and-resources)).
@@ -710,6 +796,8 @@ The gateway's backends are set in `docker-compose.yml` / `k8s/70-litellm.yaml` (
 | `OIDC_CLIENT_SECRET`, `AI_AGENT_SESSION_SECRET` | from `.env` | api: client secret at Keycloak; key for the login cookie |
 | `AI_AGENT_DB_HOST` / `AI_AGENT_DB_PORT` / `AI_AGENT_DB_PASSWORD` | `127.0.0.1` / `5432` / from `.env` | api: Ai-Agent's own database |
 | `AI_AGENT_DOCS_URL` | `http://127.0.0.1:3001/internal/docs` | harness → the api: the agent's document tools |
+| `AI_AGENT_RERANK` / `AI_AGENT_RERANK_CANDIDATES` / `AI_AGENT_RERANK_TIMEOUT_MS` | `on` / `30` / `10000` | api: rerank document search results (`off` = embeddings only), how many candidates, deadline for all of them |
+| `AI_AGENT_RERANK_MODEL` / `AI_AGENT_RERANK_URL` | `qwen3-reranker` / the gateway | api: which model reranks, and where (the eval can point it elsewhere) |
 | `HOST`, `PORT`, `MCP_PORT` | `127.0.0.1`, `3000`, `3001` | api: where it listens (containers set `HOST=0.0.0.0`) |
 | `KEYCLOAK_URL` | port-forward to `127.0.0.1:8081/auth` | scripts: Keycloak's admin API |
 | `LITELLM_ADMIN_KEY` | from `LITELLM_MASTER_KEY` | api: creates and revokes device keys |
@@ -741,6 +829,7 @@ The integration tests (`auth:test`, `devices:test`, `approvals:test`, `tenancy:t
 stay local. `npm run approvals:test` has a temporary user approve one edit "for this chat", then checks that the
 next edit in that chat goes through with no browser open, that another chat is asked again, what the audit log
 recorded, that the log can't be changed, and that the harness refuses requests without its password.
+`npm run rag:eval` measures document search and answers on a fixed test library ([Documents](#measuring-it-npm-run-rageval)).
 
 ## Project layout
 
@@ -787,7 +876,9 @@ recorded, that the log can't be changed, and that the harness refuses requests w
 | `scripts/auth-setup.ts`, `scripts/auth-test.ts` | Configure Keycloak (`npm run auth:setup`); login security test (`npm run auth:test`) |
 | `scripts/lib/session.ts` | Cookie jar + scripted OIDC sign-in, used by the scripts |
 | `web/src/components/auth/LoginScreen.tsx`, `web/src/hooks/useAuth.ts` | Sign-in screen; who's signed in |
-| `scripts/ask.ts` | Ask through the real API, report time, thoughts, tools and answer (`npm run ask -- [--runs N] [--think] "…"`) |
+| `scripts/ask.ts`, `scripts/lib/ask-agent.ts` | Ask through the real API, report time, thoughts, tools and answer (`npm run ask -- [--runs N] [--think] "…"`) |
+| `scripts/rag-eval.ts`, `evals/rag/` | Document search and answer evaluation on a fictional test library (`npm run rag:eval`) |
+| `scripts/lib/port-forward.ts`, `scripts/lib/pdf.ts` | A private port-forward to a cluster service; a minimal text-to-PDF writer for the eval |
 | `server/warmup.ts` | Load the models when the app opens after a long pause |
 | `voice/lazy_model.py` | Voice models: load on first use, unload when idle |
 | `web/src/App.tsx` | Page layout: sidebar + chat |
@@ -801,7 +892,7 @@ recorded, that the log can't be changed, and that the harness refuses requests w
 | `web/src/components/documents/DocumentsPanel.tsx` | Document library: upload (drag & drop), indexing status, delete |
 | `web/src/lib/images.ts` | Shrinks and re-encodes attached images in the browser before upload |
 | `web/src/components/chat/PermissionCard.tsx` | The approval card: what, which file, the diff, Allow / Deny |
-| `ollama/*.Modelfile` | Model variants: Qwen3.5 9B (32k context), Qwen3.5 0.8B (CPU); the old Qwen3 8B for reference |
+| `ollama/*.Modelfile` | Model variants: Qwen3.5 9B (32k context), Qwen3.5 0.8B (CPU), Qwen3Guard, Qwen3-Embedding, Qwen3-Reranker; the old Qwen3 8B for reference |
 | `workspace/` | Starter files for every new space (and, in containers, the old shared folder) |
 
 ### Backend API

@@ -1,0 +1,79 @@
+{
+  "service": "qamar-sync",
+  "description": "Moves order, stock and delivery records between customer systems and Falak Workbench.",
+  "owner_team": "Platform Data",
+  "config_version": "2026.3.1",
+  "environment": "production",
+  "region": "qalamar-1",
+  "http": {
+    "listen_port": 8443,
+    "connect_timeout_ms": 2500,
+    "read_timeout_ms": 12000,
+    "write_timeout_ms": 10000,
+    "idle_timeout_ms": 60000,
+    "max_request_body_kb": 2048
+  },
+  "retry_policy": {
+    "max_attempts": 4,
+    "backoff": { "initial_ms": 300, "multiplier": 2.0, "max_ms": 8000, "jitter": "full" },
+    "retry_on_status": [502, 503, 504],
+    "retry_on_timeout": true
+  },
+  "upstreams": [
+    { "name": "ledger-core", "timeout_ms": 4000, "max_retries": 2, "circuit_breaker": { "failure_threshold": 10, "open_seconds": 45 } },
+    { "name": "catalog-api", "timeout_ms": 1500, "max_retries": 5, "circuit_breaker": { "failure_threshold": 25, "open_seconds": 20 } },
+    { "name": "notify-hub", "timeout_ms": 3000, "max_retries": 1, "circuit_breaker": { "failure_threshold": 5, "open_seconds": 90 } },
+    { "name": "tenant-directory", "timeout_ms": 800, "max_retries": 3, "circuit_breaker": { "failure_threshold": 15, "open_seconds": 30 } }
+  ],
+  "queue": {
+    "topic": "qamar.sync.events",
+    "consumer_group": "qamar-sync-workers",
+    "workers": 12,
+    "batch_size": 250,
+    "visibility_timeout_seconds": 120,
+    "dead_letter_after_attempts": 6,
+    "dead_letter_topic": "qamar.sync.dlq"
+  },
+  "cache": {
+    "ttl_seconds": 600,
+    "negative_ttl_seconds": 30,
+    "max_entries": 50000
+  },
+  "rate_limits": {
+    "per_tenant_rpm": { "bronze": 60, "silver": 240, "gold": 900, "internal": 5000 },
+    "burst_multiplier": 1.5,
+    "exceeded_status": 429
+  },
+  "export": {
+    "max_rows": 100000,
+    "error_code_on_limit": "FS-E-2207",
+    "formats": ["tsv", "jsonl"]
+  },
+  "feature_flags": {
+    "delta_compaction": { "enabled": true, "owner_team": "Platform Data" },
+    "parallel_fanout": { "enabled": false, "note": "kept off until the load re-test after FALK-3318 is signed off" },
+    "strict_schema_v3": { "enabled": true, "reject_unknown_fields": true },
+    "beta_tenant_isolation": { "enabled": true, "rollout_percent": 35, "allowed_tiers": ["gold", "internal"] },
+    "smart_prefetch": { "enabled": true, "rollout_percent": 80 },
+    "legacy_csv_export": { "enabled": false, "removal_target": "4.7" }
+  },
+  "observability": {
+    "log_level": "info",
+    "trace_sample_rate": 0.05,
+    "metrics_prefix": "falak_qamar_sync",
+    "slow_request_threshold_ms": 1800
+  },
+  "health_check": {
+    "path": "/healthz",
+    "interval_seconds": 15,
+    "unhealthy_after_failures": 3,
+    "startup_grace_seconds": 40
+  },
+  "scaling": {
+    "min_replicas": 3,
+    "max_replicas": 18,
+    "target_cpu_percent": 65,
+    "scale_down_delay_seconds": 300
+  },
+  "maintenance_window": { "day": "Friday", "start_utc": "01:00", "duration_minutes": 90 }
+}

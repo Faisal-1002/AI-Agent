@@ -17,7 +17,7 @@ import { conversationOf } from "./owners.js";
 export async function searchText(space: string, query: string, limit = 5): Promise<string> {
   const hits = await searchDocuments(query, space, limit);
   return hits.length
-    ? hits.map((h, i) => `[${i + 1}] ${h.document} — passage ${h.position + 1} (relevance ${h.score.toFixed(2)})\n${h.content}`).join("\n\n---\n\n")
+    ? hits.map((h, i) => `[${i + 1}] ${h.document} — passage ${h.position + 1} (${h.reranked ? "answers the question" : "similarity"}: ${h.score.toFixed(2)})\n${h.content}`).join("\n\n---\n\n")
     : "No documents have been uploaded yet, or nothing matched.";
 }
 

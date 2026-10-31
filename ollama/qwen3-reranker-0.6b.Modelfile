@@ -1,0 +1,22 @@
+# Qwen3-Reranker 0.6B — reads a passage next to a question and answers "yes" or "no"; the
+# probability of "yes" ranks document search results (server/documents.ts, AI_AGENT_RERANK).
+# Apache-2.0 (Qwen); GGUF conversion by mradermacher on Hugging Face.
+# Its prompt format is fixed by training: a system line, "<Instruct>/<Query>/<Document>" as the user turn
+# (server/documents.ts sends both), then an empty thinking block. Ollama 0.35 recognizes the model as a
+# "thinking" model and renders the format itself; what makes the first token yes/no is the request's
+# reasoning_effort: "none" (without it the model starts thinking). The template below states the format.
+# Create with: ollama create ai-agent-qwen3-reranker-0.6b -f ollama/qwen3-reranker-0.6b.Modelfile
+FROM hf.co/mradermacher/Qwen3-Reranker-0.6B-GGUF:Q8_0
+TEMPLATE """<|im_start|>system
+{{ .System }}<|im_end|>
+<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+<think>
+
+</think>
+
+"""
+SYSTEM """Judge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be "yes" or "no"."""
+PARAMETER num_ctx 2048
+PARAMETER temperature 0
